@@ -165,7 +165,11 @@ def process_pattern(pattern, seqtype, strand, insertion, deletion, substitution,
 
 
 def get_sequence(dataset, seqname):
-        
+
+    if '.seq' not in dataset:
+        dataset = dataset + ".seq"
+    if 'patmatch' not in dataset:
+        dataset = dataDir + dataset
     f = open(dataset, encoding="utf-8")
     
     found = 0
