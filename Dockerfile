@@ -13,6 +13,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
 
 WORKDIR /var/www
 COPY www .
+RUN chmod 1777 tmp
 
 WORKDIR /etc/apache2/sites-available
 COPY FlaskApp.conf .
