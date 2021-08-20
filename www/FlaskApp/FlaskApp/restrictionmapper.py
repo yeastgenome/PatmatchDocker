@@ -99,6 +99,10 @@ def do_search(enzymefile):
 
     f = open(enzymefile, encoding="utf-8")
 
+    ## reset file
+    fw = open(outfile, "w")
+    fw.close()
+    
     error_msg = ""
     for line in f:
 
