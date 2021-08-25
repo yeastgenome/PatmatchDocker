@@ -2,21 +2,32 @@ import json
 import os
 import re
 import socket
+import random
 
 binDir = '/var/www/bin/'
 dataDir = '/data/restriction_mapper/'
 tmpDir = "/var/www/tmp/"
 
+id = random.randint(1, 1000000)
+
 scan4matches = binDir + "scan_for_matches"
 fastafile = dataDir + "orf_genomic.seq"
 
-patfile = tmpDir + "patfile." + str(os.getpid()) + ".txt"
-outfile = tmpDir + "outfile." + str(os.getpid()) + ".txt"
-seqfile = tmpDir + "seqfile." + str(os.getpid()) + ".txt"
+# patfile = tmpDir + "patfile." + str(os.getpid()) + ".txt"
+# outfile = tmpDir + "outfile." + str(os.getpid()) + ".txt"
+# seqfile = tmpDir + "seqfile." + str(os.getpid()) + ".txt"
+
+patfile = tmpDir + "patfile." + str(id) + ".txt"
+outfile = tmpDir + "outfile." + str(id) + ".txt"
+seqfile = tmpDir + "seqfile." + str(id) + ".txt"
 
 rootUrl = 'https://' + socket.gethostname().replace('-2a', '') + '/'
-cutSiteFile = "restrictionmapper." + str(os.getpid())
-notCutFile = "restrictionmapper_not_cut_enzyme." + str(os.getpid())
+# cutSiteFile = "restrictionmapper." + str(os.getpid())
+# notCutFile = "restrictionmapper_not_cut_enzyme." + str(os.getpid())
+
+cutSiteFile = "restrictionmapper." + str(id)
+notCutFile = "restrictionmapper_not_cut_enzyme." + str(id)
+
 downloadfile4cutSite = tmpDir + cutSiteFile 
 downloadfile4notCut = tmpDir + notCutFile
 

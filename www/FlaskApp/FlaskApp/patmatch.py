@@ -1,6 +1,7 @@
 import json
 import os
 import socket
+import random
 
 from flask import send_from_directory, Response
 
@@ -9,7 +10,9 @@ MIN_TOKEN = 3
 MINHITS = 500
 MAXHITS = 100000
 DEFAULT_MAXHITS = 500
- 
+
+id = random.randint(1, 10000000)
+
 binDir = '/var/www/bin/'
 dataDir = '/data/patmatch/'
 tmpDir = '/var/www/tmp/'
@@ -17,7 +20,8 @@ config_dir = '/var/www/conf/'
 seqIndexCreateScript = binDir + 'generate_sequence_index.pl'
 patternConvertScript = binDir + 'patmatch_to_nrgrep.pl'
 searchScript = binDir + 'nrgrep_coords'
-tmpFile = "patmatch." + str(os.getpid())
+# tmpFile = "patmatch." + str(os.getpid())
+tmpFile = "patmatch." + str(id)
 downloadFile = tmpDir + tmpFile
 rootUrl = 'https://' + socket.gethostname().replace('-2a', '') + '/'
 
