@@ -2,36 +2,18 @@ import json
 import os
 import re
 import socket
-import random
 
 binDir = '/var/www/bin/'
 dataDir = '/data/restriction_mapper/'
 tmpDir = "/var/www/tmp/"
 
-id = random.randint(1, 1000000)
-
 scan4matches = binDir + "scan_for_matches"
 fastafile = dataDir + "orf_genomic.seq"
 
-# patfile = tmpDir + "patfile." + str(os.getpid()) + ".txt"
-# outfile = tmpDir + "outfile." + str(os.getpid()) + ".txt"
-# seqfile = tmpDir + "seqfile." + str(os.getpid()) + ".txt"
-
-patfile = tmpDir + "patfile." + str(id) + ".txt"
-outfile = tmpDir + "outfile." + str(id) + ".txt"
-seqfile = tmpDir + "seqfile." + str(id) + ".txt"
-
 rootUrl = 'https://' + socket.gethostname().replace('-2a', '') + '/'
-# cutSiteFile = "restrictionmapper." + str(os.getpid())
-# notCutFile = "restrictionmapper_not_cut_enzyme." + str(os.getpid())
+# rootUrl = socket.gethostname()
 
-cutSiteFile = "restrictionmapper." + str(id)
-notCutFile = "restrictionmapper_not_cut_enzyme." + str(id)
-
-downloadfile4cutSite = tmpDir + cutSiteFile 
-downloadfile4notCut = tmpDir + notCutFile
-
-def get_downloadURLs():
+def get_downloadURLs(cutSiteFile, notCutFile):
 
     return (rootUrl + "restrictionmapper?file=" + cutSiteFile, rootUrl + "restrictionmapper?file=" + notCutFile) 
 
@@ -61,7 +43,7 @@ def get_sequence(name):
     
     return (defline, seq)
 
-def write_seqfile(defline, seq):
+def write_seqfile(defline, seq, seqfile):
     
     fw = open(seqfile, "w")
 
@@ -106,7 +88,7 @@ def set_enzyme_file(enzymetype):
     
     return dataDir + 'rest_enzymes'
 
-def do_search(enzymefile):
+def do_search(enzymefile, patfile, outfile, seqfile):
 
     f = open(enzymefile, encoding="utf-8")
 
@@ -160,7 +142,7 @@ def set_enzyme_types(enzymeHash, enzymeType):
         enzymeHash[pieces[0]] = enzymeType
     f.close()
     
-def process_data(seqLen, enzymetype):
+def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut):
 
     dataHash = {}
     offset = {}
@@ -303,7 +285,17 @@ def process_data(seqLen, enzymetype):
     return (data, notCutEnzyme)
 
 
-def run_restriction_site_search(request):
+def run_restriction_site_search(request, id):
+
+    patfile = tmpDir + "patfile." + id + ".txt"
+    outfile = tmpDir + "outfile." + id + ".txt"
+    seqfile = tmpDir + "seqfile." + id + ".txt"
+
+    cutSiteFile = "restrictionmapper." + id
+    notCutFile = "restrictionmapper_not_cut_enzyme." + id
+
+    downloadfile4cutSite = tmpDir + cutSiteFile
+    downloadfile4notCut = tmpDir + notCutFile
 
     p = request.args
     f = request.form
@@ -319,16 +311,16 @@ def run_restriction_site_search(request):
     else:
         (defline, seq) = get_sequence(name)
 
-    (seqNm, chrCoords, seqLen) = write_seqfile(defline, seq)
+    (seqNm, chrCoords, seqLen) = write_seqfile(defline, seq, seqfile)
     
     enzymefile = set_enzyme_file(enzymetype)
     
-    err = do_search(enzymefile)
+    err = do_search(enzymefile, patfile, outfile, seqfile)
 
     if err == '':
         ## key is the enzyme
-        (data, notCutEnzymeList) = process_data(seqLen, enzymetype)
-        (downloadUrl4cutSite, downloadUrl4notCut) = get_downloadURLs()
+        (data, notCutEnzymeList) = process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut)
+        (downloadUrl4cutSite, downloadUrl4notCut) = get_downloadURLs(cutSiteFile, notCutFile)
         
         return { "data": data,
                  "seqName": seqNm,

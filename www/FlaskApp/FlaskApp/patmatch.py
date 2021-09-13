@@ -1,7 +1,6 @@
 import json
 import os
 import socket
-import random
 
 from flask import send_from_directory, Response
 
@@ -11,8 +10,6 @@ MINHITS = 500
 MAXHITS = 100000
 DEFAULT_MAXHITS = 500
 
-id = random.randint(1, 10000000)
-
 binDir = '/var/www/bin/'
 dataDir = '/data/patmatch/'
 tmpDir = '/var/www/tmp/'
@@ -20,16 +17,14 @@ config_dir = '/var/www/conf/'
 seqIndexCreateScript = binDir + 'generate_sequence_index.pl'
 patternConvertScript = binDir + 'patmatch_to_nrgrep.pl'
 searchScript = binDir + 'nrgrep_coords'
-# tmpFile = "patmatch." + str(os.getpid())
-tmpFile = "patmatch." + str(id)
-downloadFile = tmpDir + tmpFile
 rootUrl = 'https://' + socket.gethostname().replace('-2a', '') + '/'
+# rootUrl = socket.gethostname()
 
 def set_download_file(filename):
 
     return send_from_directory(tmpDir, filename, as_attachment=True, mimetype='application/text', attachment_filename=(str(filename)))
 
-def get_downloadUrl():
+def get_downloadUrl(tmpFile):
 
     return rootUrl + "patmatch?file=" + tmpFile
 
@@ -239,7 +234,7 @@ def set_seq_length(seqNm2length, datafile):
         seqNm2length[preSeqNm] = len(seq)
     f.close()
     
-def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, begMatch, endMatch):
+def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, begMatch, endMatch, downloadFile):
 
     seqNm2length = {}
     if endMatch == 1:
@@ -406,7 +401,10 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
     return (newData, uniqueHits, totalHits)
 
 
-def run_patmatch(request):
+def run_patmatch(request, id):
+
+    tmpFile = "patmatch." + id
+    downloadFile = tmpDir + tmpFile
 
     p = request.args
     f = request.form
@@ -480,11 +478,11 @@ def run_patmatch(request):
     
     (data, uniqueHits, totalHits) = process_output(recordOffSetList, seqNm4offSet, output,
                                                    datafile, get_param(request, 'max_hits'),
-                                                   begMatch, endMatch)
+                                                   begMatch, endMatch, downloadFile)
 
     downloadUrl = ''
     if uniqueHits > 0:
-        downloadUrl = get_downloadUrl()
+        downloadUrl = get_downloadUrl(tmpFile)
         
     return { "hits": data,
              "uniqueHits": uniqueHits,

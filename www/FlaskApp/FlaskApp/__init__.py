@@ -3,6 +3,7 @@ import json
 import sys
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import random
 
 sys.path.insert(0,"/var/www/FlaskApp/FlaskApp")
 from patmatch import run_patmatch, get_config, get_sequence, set_download_file
@@ -33,8 +34,10 @@ def patmatch():
     if p.get('seqname'):
         data = get_sequence(p.get('dataset'), p.get('seqname'))
         return jsonify(data)
+
+    id = random.randint(1, 10000000)
     
-    data = run_patmatch(request)
+    data = run_patmatch(request, str(id))
     return jsonify(data)
 
 
@@ -46,8 +49,10 @@ def restrictionmapper():
     if p.get('file'):
         response = set_download_file(p.get('file'))
         return response
+
+    id = random.randint(1, 10000000)
     
-    data = run_restriction_site_search(request)
+    data = run_restriction_site_search(request, str(id))
     return jsonify(data)
 
 
