@@ -18,7 +18,7 @@ seqIndexCreateScript = binDir + 'generate_sequence_index.pl'
 patternConvertScript = binDir + 'patmatch_to_nrgrep.pl'
 searchScript = binDir + 'nrgrep_coords'
 # rootUrl = 'https://' + socket.gethostname().replace('-2a', '') + '/'
-rootUrl = socket.gethostname()
+rootUrl = 'https://' + socket.gethostname() + '/'
 
 def set_download_file(filename):
 

@@ -11,7 +11,7 @@ scan4matches = binDir + "scan_for_matches"
 fastafile = dataDir + "orf_genomic.seq"
 
 # rootUrl = 'https://' + socket.gethostname().replace('-2a', '') + '/'
-rootUrl = socket.gethostname()
+rootUrl = 'https://' + socket.gethostname() + '/'
 
 def get_downloadURLs(cutSiteFile, notCutFile):
 
