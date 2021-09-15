@@ -14,6 +14,8 @@ app = Flask(__name__)
 ## to solve Cross Origin Resource issue
 CORS(app)  
 
+random_max = 10000000
+
 @app.route('/')
 def hello():
     return "Hello, we all love SGD!!"
@@ -34,10 +36,8 @@ def patmatch():
     if p.get('seqname'):
         data = get_sequence(p.get('dataset'), p.get('seqname'))
         return jsonify(data)
-
-    id = random.randint(1, 10000000)
     
-    data = run_patmatch(request, str(id))
+    data = run_patmatch(request, get_id())
     return jsonify(data)
 
 
@@ -49,12 +49,13 @@ def restrictionmapper():
     if p.get('file'):
         response = set_download_file(p.get('file'))
         return response
-
-    id = random.randint(1, 10000000)
     
-    data = run_restriction_site_search(request, str(id))
+    data = run_restriction_site_search(request, get_id())
     return jsonify(data)
 
+def get_id():
+    
+    return str(random.randint(1, random_max))
 
 if __name__ == '__main__':
     app.run()
