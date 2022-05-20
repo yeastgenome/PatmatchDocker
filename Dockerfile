@@ -10,6 +10,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     && pip3 install Flask \
     && pip3 install -U flask-cors \
     && pip3 install virtualenv \
+    && pip3 install boto3
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /var/www
