@@ -1,6 +1,8 @@
 import json
 import os
-import socket
+import hashlib
+from pathlib import Path
+import boto3
 
 from flask import send_from_directory, Response
 
@@ -17,16 +19,38 @@ config_dir = '/var/www/conf/'
 seqIndexCreateScript = binDir + 'generate_sequence_index.pl'
 patternConvertScript = binDir + 'patmatch_to_nrgrep.pl'
 searchScript = binDir + 'nrgrep_coords'
-# rootUrl = 'https://' + socket.gethostname().replace('-2a', '') + '/'
-rootUrl = 'https://' + socket.gethostname() + '/'
 
 def set_download_file(filename):
 
     return send_from_directory(tmpDir, filename, as_attachment=True, mimetype='application/text', attachment_filename=(str(filename)))
 
+def upload_file_to_s3(file, filename):
+
+    S3_BUCKET = os.environ['S3_BUCKET']
+    s3 = boto3.client('s3')
+    file.seek(0)
+    s3.upload_fileobj(file, S3_BUCKET, filename, ExtraArgs={'ACL': 'public-read'})
+    return "https://" + S3_BUCKET + ".s3.amazonaws.com/" + filename
+              
 def get_downloadUrl(tmpFile):
 
-    return rootUrl + "patmatch?file=" + tmpFile
+    downloadFile = tmpDir + tmpFile
+    thisFile = Path(str(downloadFile))
+    md5sum = None
+    with thisFile.open(mode="rb") as fh:
+        md5sum = hashlib.md5(fh.read()).hexdigest()
+    newFileName = downloadFile
+    if md5sum:
+        tmpFile = md5sum + ".txt"
+        newFileName = tmpDir + tmpFile
+        os.rename(downloadFile, newFileName)
+
+    file = open(newFileName, "rb")
+       
+    s3_url = upload_file_to_s3(file, tmpFile)
+
+    return s3_url
+
 
 def get_config(conf):
 

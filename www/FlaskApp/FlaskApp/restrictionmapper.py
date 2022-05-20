@@ -1,7 +1,7 @@
 import json
 import os
 import re
-import socket
+from patmatch import get_downloadUrl
 
 binDir = '/var/www/bin/'
 dataDir = '/data/restriction_mapper/'
@@ -10,13 +10,10 @@ tmpDir = "/var/www/tmp/"
 scan4matches = binDir + "scan_for_matches"
 fastafile = dataDir + "orf_genomic.seq"
 
-# rootUrl = 'https://' + socket.gethostname().replace('-2a', '') + '/'
-rootUrl = 'https://' + socket.gethostname() + '/'
-
 def get_downloadURLs(cutSiteFile, notCutFile):
 
-    return (rootUrl + "restrictionmapper?file=" + cutSiteFile, rootUrl + "restrictionmapper?file=" + notCutFile) 
-
+    return (get_downloadUrl(cutSiteFile), get_downloadUrl(notCutFile))
+    
 def get_sequence(name):
 
     name = name.replace('SGD:', '')
