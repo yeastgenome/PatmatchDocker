@@ -3,6 +3,7 @@ import os
 import hashlib
 from pathlib import Path
 import boto3
+import time
 
 from flask import send_from_directory, Response
 
@@ -19,17 +20,28 @@ config_dir = '/var/www/conf/'
 seqIndexCreateScript = binDir + 'generate_sequence_index.pl'
 patternConvertScript = binDir + 'patmatch_to_nrgrep.pl'
 searchScript = binDir + 'nrgrep_coords'
+day = 1  ## delete temp files that are one day old
 
 def set_download_file(filename):
 
     return send_from_directory(tmpDir, filename, as_attachment=True, mimetype='application/text', attachment_filename=(str(filename)))
 
+def clean_up_temp_files():
+    
+    now = time.time()
+    for f in os.listdir(tmpDir):
+        file = os.path.join(tmpDir, f)
+        if os.stat(file).st_mtime < now - day * 86400:
+            if os.path.isfile(file):
+                os.remove(file)
+    
 def upload_file_to_s3(file, filename):
 
     S3_BUCKET = os.environ['S3_BUCKET']
     s3 = boto3.client('s3')
     file.seek(0)
     s3.upload_fileobj(file, S3_BUCKET, filename, ExtraArgs={'ACL': 'public-read'})
+    clean_up_temp_files()
     return "https://" + S3_BUCKET + ".s3.amazonaws.com/" + filename
               
 def get_downloadUrl(tmpFile):
