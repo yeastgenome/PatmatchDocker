@@ -37,6 +37,8 @@ def clean_up_temp_files():
     
 def upload_file_to_s3(file, filename):
 
+    filename = 'patmatch' + filename
+    
     S3_BUCKET = os.environ['S3_BUCKET']
     s3 = boto3.client('s3')
     file.seek(0)
