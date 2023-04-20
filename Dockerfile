@@ -23,7 +23,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /PatmatchDocker/www /var/www
-COPY --from-builder /PatmatchDocker/FlaskApp.conf /etc/apache2/sites-available/
+COPY --from=builder /PatmatchDocker/FlaskApp.conf /etc/apache2/sites-available/
 
 WORKDIR /var/www/FlaskApp/FlaskApp/static
 WORKDIR /var/www/FlaskApp/FlaskApp/venv
