@@ -22,14 +22,13 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     && pip3 install boto3 \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /var/www
-COPY --from=builder /PatmatchDocker/www .
+COPY --from=builder /PatmatchDocker/www /var/www
+COPY --from-builder /PatmatchDocker/FlaskApp.conf /etc/apache2/sites-available/
 
 WORKDIR /var/www/FlaskApp/FlaskApp/static
 WORKDIR /var/www/FlaskApp/FlaskApp/venv
 WORKDIR /var/www/FlaskApp/FlaskApp
 RUN chmod 1777 /var/www/tmp \
-    && cp -p /PatmatchDocker/FlaskApp.conf /etc/apache2/sites-available \
     && a2enmod wsgi \
     && a2ensite FlaskApp \
     && a2dissite 000-default \
