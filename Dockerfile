@@ -25,10 +25,11 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
 COPY --from=builder /PatmatchDocker/www /var/www
 COPY --from=builder /PatmatchDocker/FlaskApp.conf /etc/apache2/sites-available/
 
+WORKDIR /var/www/tmp
 WORKDIR /var/www/FlaskApp/FlaskApp/static
 WORKDIR /var/www/FlaskApp/FlaskApp/venv
 WORKDIR /var/www/FlaskApp/FlaskApp
-WORKDIR /var/www/tmp
+
 RUN chmod 1777 /var/www/tmp \
     && a2enmod wsgi \
     && a2ensite FlaskApp \
