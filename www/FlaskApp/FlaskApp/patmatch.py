@@ -233,13 +233,26 @@ def get_sequence(dataset, seqname):
              'seq': seq }
 
 
-def get_param(request, name):
+def get_param(request, name, default=None):
 
+    """
     p = request.args
     f = request.form
 
     return f.get(name) if f.get(name) else p.get(name)
+    """
 
+    # Check if the parameter is in the query string
+    value = request.args.get(name)
+    
+    # If not in the query string, check the form data
+    if value is None:
+        value = request.form.get(name)
+
+    # Return the value if found, otherwise return the default value
+    return value if value is not None else default
+
+    
 def cleanup_pattern(pattern):
     
     pattern = pattern.replace('%28', '(').replace('%29', ')')
