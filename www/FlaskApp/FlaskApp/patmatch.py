@@ -322,8 +322,6 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
                 seqNm2orfs[seqName] = orfs;
         f.close()
 
-
-    
     data = []
 
     totalHits = 0
@@ -332,9 +330,13 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
 
     if maxhits is None:
         maxhits = DEFAULT_MAXHITS
-    if 'no limit' in str(maxhits) or (str(maxhits).isdigit() and int(maxhits) < MINHITS):
-        maxhits = MAXHITS;
-    maxhits = int(maxhits)
+    elif str(maxhits).isdigit():
+        maxhits = int(maxhits)
+    elif str(maxhits).lower() in ['no limit', 'no+limit']:
+        maxhits = MAXHITS
+    else:
+        # Log unexpected value of maxhits, if needed
+        maxhits = DEFAULT_MAXHITS
     
     for line in output.split('\n'):
         
