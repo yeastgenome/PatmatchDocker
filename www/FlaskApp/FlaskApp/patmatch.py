@@ -368,10 +368,13 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
             matchingPattern = pieces[2]
         
             offSet = get_name_offset(beg, recordOffSetList);
+            if not str(offSet).isdigit():
+                continue
             seqBeg = beg - offSet + 1
             seqEnd = end - offSet
-            seqNm = seqNm4offSet[offSet]
-            
+            seqNm = seqNm4offSet.get(offSet, None)
+            if seqNm is None:
+                continue
             if begMatch == 1 and seqBeg != 1:
                 continue
             if endMatch == 1 and seqEnd != seqNm2length[seqNm]:
@@ -384,7 +387,11 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
                 seqNm = seqNm.rstrip(seqNm[-1])
                 
             if 'Not' in datafile:
-                num = int(seqNm.split(':')[1].split('-')[0])
+                # num = int(seqNm.split(':')[1].split('-')[0])
+                pieces = seqNm.split(':')
+                if len(pieces) < 2:
+                    continue
+                num = int(pieces.split('-')[0])
                 seqBeg = seqBeg + num -1
                 seqEnd = seqEnd + num -1
                 if seqNm not in seqNm2chr or seqNm not in seqNm2orfs:
@@ -408,7 +415,14 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
             totalHits = totalHits + 1
 
             data.append(row)
-            
+
+    return (data, uniqueHits, totalHits, maxhits)
+
+
+
+
+
+
     fw = open(downloadFile, "w")
     if 'Not' in datafile:
         fw.write("Chromosome\tBetweenORFtoORF\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n")    
@@ -417,11 +431,11 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
     else:
         fw.write("Sequence Name\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n")
     fw.close()
-    
+
     newData = []
 
     data.sort()
-
+    
     with open(downloadFile, "a") as fw:
         for row in data:
             if 'Not' in datafile:
@@ -552,7 +566,7 @@ def run_patmatch(request, id):
     #    downloadUrl = get_downloadUrl(tmpFile)
         
     return { "total_hits_returned": len(data),
-             "hits": data[0:500],
+             "hits": data[0:5],
              "maxhits": maxhits,
              "uniqueHits": uniqueHits,
              "totalHits": totalHits,
