@@ -83,8 +83,6 @@ def get_downloadUrl(tmpFile):
     S3_BUCKET = os.environ['S3_BUCKET']
     return "https://" + S3_BUCKET + ".s3.amazonaws.com/" + 'patmatch/' + tmpFile
 
-    return s3_url
-
 
 def get_config(conf):
 
