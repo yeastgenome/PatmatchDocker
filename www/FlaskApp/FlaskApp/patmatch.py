@@ -4,6 +4,7 @@ import hashlib
 from pathlib import Path
 import boto3
 import time
+import threading
 
 from flask import send_from_directory, Response
 
@@ -34,7 +35,18 @@ def clean_up_temp_files():
         if os.stat(file).st_mtime < now - day * 86400:
             if os.path.isfile(file):
                 os.remove(file)
-    
+
+def upload_file_to_s3_async(file, filename):
+    """
+    Uploads file to S3 asynchronously.
+    """
+    try:
+        upload_file_to_s3(file, filename)
+    except Exception as e:
+        print("Error uploading file:", e)
+    finally:
+        file.close()
+
 def upload_file_to_s3(file, filename):
 
     filename = 'patmatch/' + filename
@@ -61,7 +73,15 @@ def get_downloadUrl(tmpFile):
 
     file = open(newFileName, "rb")
        
-    s3_url = upload_file_to_s3(file, tmpFile)
+    # s3_url = upload_file_to_s3(file, tmpFile)
+
+    # Start a new thread for file upload
+    thread = threading.Thread(target=upload_file_to_s3_async, args=(file, tmpFile))
+    thread.start()
+
+    # Return the expected S3 URL immediately
+    S3_BUCKET = os.environ['S3_BUCKET']
+    return "https://" + S3_BUCKET + ".s3.amazonaws.com/" + 'patmatch/' + tmpFile
 
     return s3_url
 
