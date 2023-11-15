@@ -10,7 +10,7 @@ from flask import send_from_directory, Response
 MAX_BUFFER_SIZE = 1600000
 MIN_TOKEN = 3
 MINHITS = 500
-MAXHITS = 100000
+MAXHITS = 10000
 DEFAULT_MAXHITS = 500
 
 binDir = '/var/www/bin/'
