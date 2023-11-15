@@ -10,7 +10,7 @@ from flask import send_from_directory, Response
 MAX_BUFFER_SIZE = 1600000
 MIN_TOKEN = 3
 MINHITS = 500
-MAXHITS = 10000
+MAXHITS = 100000
 DEFAULT_MAXHITS = 500
 
 binDir = '/var/www/bin/'
@@ -284,84 +284,48 @@ def set_seq_length(seqNm2length, datafile):
             seq = seq.rstrip(seq[-1])
         seqNm2length[preSeqNm] = len(seq)
     f.close()
-
-    
-def read_name2data(datafile):
-    name2data = {}
-    with open(datafile, encoding="utf-8") as f:
-        for line in f:
-            pieces = line.strip().split('\t')
-            seqName = pieces[0]
-            geneName = pieces[1]
-            sgdid = pieces[2]
-            desc = '' if len(pieces) <= 3 else pieces[3]
-            name2data[seqName] = (geneName, sgdid, desc)
-    return name2data
-
-
-def read_seqNm2chr_and_seqNm2orfs(datafile):
-    seqNm2chr = {}
-    seqNm2orfs = {}
-    with open(datafile, encoding="utf-8") as f:
-        for line in f:
-            if line.startswith('>'):
-                # >A:2170-2479, Chr I from 2170-2479, Genome Release 64-3-1, between YAL068C and YAL067W-A
-                # /^>([^ ]+)\, Chr ([^ ]+) from .+ between ([^ ]+ and [^ ]+)/) 
-                pieces = line.strip().replace('>', '').split(' ')
-                seqName = pieces[0].replace(',', '')
-                chr = pieces[2]
-                orfs = line.strip().split('between ')[1].replace('and', '-')
-                seqNm2chr[seqName] = chr
-                seqNm2orfs[seqName] = orfs
-    return seqNm2chr, seqNm2orfs
-
-def process_line(line, recordOffSetList, seqNm4offSet, seqNm2length, seqNm2chr, seqNm2orfs, begMatch, endMatch, datafile):
-    line = line.replace('[', '').replace(']', '')
-    line = line.replace(':', '').replace(',', '')
-    pieces = line.split(' ')
-    if len(pieces) < 3:
-        return None
-    beg = int(pieces[0])
-    end = int(pieces[1])
-    matchingPattern = pieces[2]
-
-    offSet = get_name_offset(beg, recordOffSetList)
-    seqBeg = beg - offSet + 1
-    seqEnd = end - offSet
-    seqNm = seqNm4offSet[offSet]
-
-    if begMatch == 1 and seqBeg != 1:
-        return None
-    if endMatch == 1 and seqEnd != seqNm2length[seqNm]:
-        return None
-    if seqNm.startswith('>'):
-        return None
-
-    seqNm = seqNm.rstrip(',') if seqNm.endswith(',') else seqNm
-
-    if 'Not' in datafile:
-        num = int(seqNm.split(':')[1].split('-')[0])
-        seqBeg += num - 1
-        seqEnd += num - 1
-        if seqNm not in seqNm2chr or seqNm not in seqNm2orfs:
-            return None
-        return seqNm2orfs[seqNm], seqBeg, seqEnd, matchingPattern, seqNm2chr[seqNm], seqNm
-
-    return seqNm, seqBeg, seqEnd, matchingPattern
-
     
 def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, begMatch, endMatch, downloadFile):
 
     seqNm2length = {}
+    if endMatch == 1:
+        set_seq_length(seqNm2length, datafile)
+    
+    name2data = {}
+    if 'orf_' in datafile:
+        with open(dataDir + "locus.txt", encoding="utf-8") as f:
+            for line in f:
+                pieces = line.strip().split('\t')
+                seqName = pieces[0]
+                geneName = pieces[1]
+                sgdid = pieces[2]
+                desc = ''
+                if len(pieces) > 3:
+                    desc = pieces[3]
+                name2data[seqName] = (geneName, sgdid, desc)
+
     seqNm2chr = {}
     seqNm2orfs = {}
-    name2data = {}
+    if 'Not' in datafile:
+        with open(datafile, encoding="utf-8") as f:
+            for line in f:
+                if line.startswith('>'):
+                    # >A:2170-2479, Chr I from 2170-2479, Genome Release 64-3-1, between YAL068C and YAL067W-A
+                    # /^>([^ ]+)\, Chr ([^ ]+) from .+ between ([^ ]+ and [^ ]+)/)
+                    pieces = line.strip().replace('>', '').split(' ')
+                    seqName = pieces[0].replace(',', '')
+                    chr = pieces[2]
+                    orfs = line.strip().split('between ')[1]
+                    seqNm2chr[seqName] = chr
+                    orfs = orfs.replace('and', '-')
+                    seqNm2orfs[seqName] = orfs;
+        
+    data = []
+
     totalHits = 0
     uniqueHits = 0
     hitCount4seqNm = {}
-    data = []
 
-    # Determine the correct value of maxhits
     if maxhits is None:
         maxhits = DEFAULT_MAXHITS
     elif str(maxhits).isdigit():
@@ -369,33 +333,49 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
     elif str(maxhits).lower() in ['no limit', 'no+limit']:
         maxhits = MAXHITS
     else:
+        # Log unexpected value of maxhits, if needed
         maxhits = DEFAULT_MAXHITS
-
-    if endMatch == 1:
-        set_seq_length(seqNm2length, datafile)
-    if 'orf_' in datafile:
-        name2data = read_name2data(datafile)
-    if 'Not' in datafile:
-        seqNm2chr, seqNm2orfs = read_seqNm2chr_and_seqNm2orfs(datafile)
     
     for line in output.split('\n'):
         
         if line.startswith('['):
 
-            result = process_line(line, recordOffSetList, seqNm4offSet, seqNm2length, seqNm2chr, seqNm2orfs, begMatch, endMatch, datafile)
-            if result is None:
+            line = line.replace('[', '').replace(']', '')
+            line = line.replace(':', '').replace(',', '')
+            pieces = line.split(' ')
+            if len(pieces) < 3:
                 continue
+            beg = int(pieces[0])
+            end = int(pieces[1])
+            matchingPattern = pieces[2]
+        
+            offSet = get_name_offset(beg, recordOffSetList);
+            seqBeg = beg - offSet + 1
+            seqEnd = end - offSet
+            seqNm = seqNm4offSet[offSet]
             
-            ## to look from here
+            if begMatch == 1 and seqBeg != 1:
+                continue
+            if endMatch == 1 and seqEnd != seqNm2length[seqNm]:
+                continue
+            if seqNm.startswith('>'):
+                ## match to the fasta header line 
+                continue
+
+            if seqNm.endswith(','):
+                seqNm = seqNm.rstrip(seqNm[-1])
                 
             if 'Not' in datafile:
-                orfs, seqBeg, seqEnd, matchingPattern, chr, seqNm = result
+                num = int(seqNm.split(':')[1].split('-')[0])
+                seqBeg = seqBeg + num -1
+                seqEnd = seqEnd + num -1
+                if seqNm not in seqNm2chr or seqNm not in seqNm2orfs:
+                    continue
 
-                row = str(orfs) + "\t" + str(seqBeg) +  "\t" + str(seqEnd) + "\t" + matchingPattern + "\t" + str(chr) + "\t" + seqNm
+                row = str(seqNm2orfs.get(seqNm)) + "\t" + str(seqBeg) +  "\t" + str(seqEnd) + "\t" + matchingPattern + "\t" + str(seqNm2chr.get(seqNm)) + "\t" + seqNm
                 
             else:
                 (gene, sgdid, desc) = name2data.get(seqNm, ('', '', ''))
-                seqNm, seqBeg, seqEnd, matchingPattern = result
                 row = seqNm + "\t" + str(seqBeg) + "\t" + str(seqEnd) + "\t" + matchingPattern + "\t" + gene + "\t" + sgdid + "\t" + desc
 
             if seqNm not in hitCount4seqNm:
@@ -411,18 +391,20 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
 
             data.append(row)
             
+    fw = open(downloadFile, "w")
     if 'Not' in datafile:
         fw.write("Chromosome\tBetweenORFtoORF\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n")    
     elif 'orf_' in datafile:
         fw.write("Feature Name\tGene Name\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\tLocusInfo\n")
     else:
         fw.write("Sequence Name\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n")
+    fw.close()
     
     newData = []
 
     data.sort()
 
-    with open(downloadFile, "w") as fw:
+    with open(downloadFile, "a") as fw:
         for row in data:
             if 'Not' in datafile:
                 [orfs, beg, end, matchPattern, chr, seqNm] = row.split('\t')
@@ -445,15 +427,15 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
             if sgdid != "":
                 if gene == seqNm:
                     gene = ""
-                    newData.append({ 'seqname': seqNm,
-                                     'beg': beg,
-                                     'end': end,
-                                     'count': count,
-                                     'matchingPattern': matchPattern,
-                                     'gene_name': gene,
-                                     'sgdid': sgdid,
-                                     'desc': desc })
-                    fw.write(seqNm + "\t" + gene + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\t" + desc + "\n")
+                newData.append({ 'seqname': seqNm,
+                                 'beg': beg,
+                                 'end': end,
+                                 'count': count,
+                                 'matchingPattern': matchPattern,
+                                 'gene_name': gene,
+                                 'sgdid': sgdid,
+                                 'desc': desc })
+                fw.write(seqNm + "\t" + gene + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\t" + desc + "\n")
             else:
                 newData.append({ 'seqname': seqNm,
                                  'gene_name': gene,
