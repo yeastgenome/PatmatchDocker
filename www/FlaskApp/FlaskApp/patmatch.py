@@ -416,34 +416,36 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
 
             data.append(row)
 
-    fw = open(downloadFile, "w")
+    file_content = []
+    header_line = ""
+
     if 'Not' in datafile:
-        fw.write("Chromosome\tBetweenORFtoORF\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n")    
+        header_line = "Chromosome\tBetweenORFtoORF\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n"    
     elif 'orf_' in datafile:
-        fw.write("Feature Name\tGene Name\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\tLocusInfo\n")
+        header_line = "Feature Name\tGene Name\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\tLocusInfo\n"
     else:
-        fw.write("Sequence Name\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n")
-    fw.close()
+        header_line = "Sequence Name\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n"
+
+    file_content.append(header_line)
 
     newData = []
 
     data.sort()
     
-    with open(downloadFile, "a") as fw:
-        for row in data:
-            if 'Not' in datafile:
-                [orfs, beg, end, matchPattern, chr, seqNm] = row.split('\t')
-                count = hitCount4seqNm[seqNm]
-                orfs = orfs.strip()
-                newData.append({ 'orfs': orfs,
-                                 'chr': chr,
-                                 'beg': beg,
-                                 'end': end,
-                                 'count': count,
-                                 'seqname': seqNm,
-                                 'matchingPattern': matchPattern })
-                fw.write(chr + "\t" + orfs + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n")
-                continue
+    for row in data:
+        if 'Not' in datafile:
+            [orfs, beg, end, matchPattern, chr, seqNm] = row.split('\t')
+            count = hitCount4seqNm[seqNm]
+            orfs = orfs.strip()
+            newData.append({ 'orfs': orfs,
+                             'chr': chr,
+                             'beg': beg,
+                             'end': end,
+                             'count': count,
+                             'seqname': seqNm,
+                             'matchingPattern': matchPattern })
+            line = chr + "\t" + orfs + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n"
+        else:
 
             [seqNm, beg, end, matchPattern, gene, sgdid, desc] = row.split('\t')
         
@@ -460,7 +462,7 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
                                  'gene_name': gene,
                                  'sgdid': sgdid,
                                  'desc': desc })
-                fw.write(seqNm + "\t" + gene + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\t" + desc + "\n")
+                line = seqNm + "\t" + gene + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\t" + desc + "\n"
             else:
                 newData.append({ 'seqname': seqNm,
                                  'gene_name': gene,
@@ -470,8 +472,16 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
                                  'count': count,
                                  'matchingPattern': matchPattern,
                                  'desc': desc })
-                fw.write(seqNm + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n")
+                line = seqNm + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n"
 
+            file_content.append(line)
+
+    try:
+        with open(downloadFile, "w") as fw:
+            fw.writelines(file_content)
+    except IOError as e:
+        print(f"Error writing to file {downloadFile}: {e}")
+            
     return (newData, uniqueHits, totalHits)
 
 
