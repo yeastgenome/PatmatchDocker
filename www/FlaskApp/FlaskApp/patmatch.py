@@ -494,12 +494,14 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
             error_message += "Traceback: " + str(traceback.format_exc()) + "\n"
             continue
     try:
-        with open(downloadFile, "w") as fw:
+        with open(downloadFile, "w", encoding='utf-8') as fw:
             fw.writelines(file_content)
     except MemoryError as e:
         error_message += "Memory Error during file writing: " + str(e) + "\n"
     except OSError as e:
         error_message += "OS Error during file writing: " + str(e) + "\n"
+    except UnicodeEncodeError as e:
+        error_message += "Unicode Encoding Error: " + str(e) + "\n"
     except Exception as e:
         error_message += "Error writing to file " + downloadFile + ":" + str(e)
         error_message += "Traceback: " + str(traceback.format_exc()) + "\n"
@@ -587,8 +589,8 @@ def run_patmatch(request, id):
                                                                   begMatch, endMatch, downloadFile)
 
     downloadUrl = ''
-    # if uniqueHits > 0:
-    #    downloadUrl = get_downloadUrl(tmpFile)
+    if uniqueHits > 0:
+        downloadUrl = get_downloadUrl(tmpFile)
         
     return { "hits": data,
              "uniqueHits": uniqueHits,
