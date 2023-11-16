@@ -391,7 +391,7 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
                 pieces = seqNm.split(':')
                 if len(pieces) < 2:
                     continue
-                num = int(pieces.split('-')[0])
+                num = int(pieces[1].split('-')[0])
                 seqBeg = seqBeg + num -1
                 seqEnd = seqEnd + num -1
                 if seqNm not in seqNm2chr or seqNm not in seqNm2orfs:
