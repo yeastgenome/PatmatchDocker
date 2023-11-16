@@ -476,13 +476,14 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
 
             file_content.append(line)
 
+    error_message = ''
     try:
         with open(downloadFile, "w") as fw:
             fw.writelines(file_content)
     except IOError as e:
-        print(f"Error writing to file {downloadFile}: {e}")
+        error_message = "Error writing to file " + downloadFile + ":" + str(e)
             
-    return (newData, uniqueHits, totalHits)
+    return (newData, uniqueHits, totalHits, error_message)
 
 
 def run_patmatch(request, id):
@@ -560,18 +561,19 @@ def run_patmatch(request, id):
     #         "recordOffSetlist": recordOffSetList,
     #         "seqNm4offSet": seqNm4offSet }
     
-    (data, uniqueHits, totalHits) = process_output(recordOffSetList, seqNm4offSet, output,
-                                                   datafile, get_param(request, 'max_hits'),
-                                                   begMatch, endMatch, downloadFile)
+    (data, uniqueHits, totalHits, error_message) = process_output(recordOffSetList, seqNm4offSet, output,
+                                                                  datafile, get_param(request, 'max_hits'),
+                                                                  begMatch, endMatch, downloadFile)
 
     downloadUrl = ''
-    if uniqueHits > 0:
-        downloadUrl = get_downloadUrl(tmpFile)
+    # if uniqueHits > 0:
+    #    downloadUrl = get_downloadUrl(tmpFile)
         
     return { "hits": data,
              "uniqueHits": uniqueHits,
              "totalHits": totalHits,
-             "downloadUrl": downloadUrl }
+             "downloadUrl": downloadUrl,
+             "error_message": error_message }
     
     
 
