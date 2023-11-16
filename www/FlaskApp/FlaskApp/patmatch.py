@@ -431,40 +431,43 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
     newData = []
 
     data.sort()
+
+    error_message = ''
     
     for row in data:
-        if 'Not' in datafile:
-            [orfs, beg, end, matchPattern, chr, seqNm] = row.split('\t')
-            count = hitCount4seqNm[seqNm]
-            orfs = orfs.strip()
-            newData.append({ 'orfs': orfs,
+        try:
+            if 'Not' in datafile:
+                [orfs, beg, end, matchPattern, chr, seqNm] = row.split('\t')
+                count = hitCount4seqNm[seqNm]
+                orfs = orfs.strip()
+                newData.append({ 'orfs': orfs,
                              'chr': chr,
                              'beg': beg,
                              'end': end,
                              'count': count,
                              'seqname': seqNm,
                              'matchingPattern': matchPattern })
-            line = chr + "\t" + orfs + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n"
-        else:
-
-            [seqNm, beg, end, matchPattern, gene, sgdid, desc] = row.split('\t')
-        
-            count = hitCount4seqNm.get(seqNm, 0)
-        
-            if sgdid != "":
-                if gene == seqNm:
-                    gene = ""
-                newData.append({ 'seqname': seqNm,
-                                 'beg': beg,
-                                 'end': end,
-                                 'count': count,
-                                 'matchingPattern': matchPattern,
-                                 'gene_name': gene,
-                                 'sgdid': sgdid,
-                                 'desc': desc })
-                line = seqNm + "\t" + gene + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\t" + desc + "\n"
+                line = chr + "\t" + orfs + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n"
             else:
-                newData.append({ 'seqname': seqNm,
+
+                [seqNm, beg, end, matchPattern, gene, sgdid, desc] = row.split('\t')
+        
+                count = hitCount4seqNm.get(seqNm, 0)
+        
+                if sgdid != "":
+                    if gene == seqNm:
+                        gene = ""
+                    newData.append({ 'seqname': seqNm,
+                                 'beg': beg,
+                                 'end': end,
+                                 'count': count,
+                                 'matchingPattern': matchPattern,
+                                 'gene_name': gene,
+                                 'sgdid': sgdid,
+                                 'desc': desc })
+                    line = seqNm + "\t" + gene + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\t" + desc + "\n"
+                else:
+                    newData.append({ 'seqname': seqNm,
                                  'gene_name': gene,
                                  'sgdid': sgdid,
                                  'beg': beg,
@@ -472,11 +475,16 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
                                  'count': count,
                                  'matchingPattern': matchPattern,
                                  'desc': desc })
-                line = seqNm + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n"
-
-            file_content.append(line)
-
-    error_message = ''
+                    line = seqNm + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n"
+                file_content.append(line)
+        except (IndexError, ValueError) as e:
+            # Handle specific errors like IndexError or ValueError
+            error_message = "Error processing row: " + str(row) + "error: " + str(e)
+            continue
+        except Exception as e:
+            # Catch any other unforeseen errors
+            error_message = "Unexpected error for row: " + str(row) + "error: " + str(e)
+            continue
     try:
         with open(downloadFile, "w") as fw:
             fw.writelines(file_content)
