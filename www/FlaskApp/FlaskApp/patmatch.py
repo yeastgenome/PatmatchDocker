@@ -416,13 +416,6 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
 
             data.append(row)
 
-    return (data, uniqueHits, totalHits, maxhits)
-
-
-
-
-
-
     fw = open(downloadFile, "w")
     if 'Not' in datafile:
         fw.write("Chromosome\tBetweenORFtoORF\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n")    
@@ -479,7 +472,7 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
                                  'desc': desc })
                 fw.write(seqNm + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n")
 
-    return (newData, uniqueHits, totalHits, maxhits)
+    return (newData, uniqueHits, totalHits)
 
 
 def run_patmatch(request, id):
@@ -557,17 +550,15 @@ def run_patmatch(request, id):
     #         "recordOffSetlist": recordOffSetList,
     #         "seqNm4offSet": seqNm4offSet }
     
-    (data, uniqueHits, totalHits, maxhits) = process_output(recordOffSetList, seqNm4offSet, output,
-                                                            datafile, get_param(request, 'max_hits'),
-                                                            begMatch, endMatch, downloadFile)
+    (data, uniqueHits, totalHits) = process_output(recordOffSetList, seqNm4offSet, output,
+                                                   datafile, get_param(request, 'max_hits'),
+                                                   begMatch, endMatch, downloadFile)
 
     downloadUrl = ''
-    # if uniqueHits > 0:
-    #    downloadUrl = get_downloadUrl(tmpFile)
+    if uniqueHits > 0:
+        downloadUrl = get_downloadUrl(tmpFile)
         
-    return { "total_hits_returned": len(data),
-             "hits": data[0:5],
-             "maxhits": maxhits,
+    return { "hits": data,
              "uniqueHits": uniqueHits,
              "totalHits": totalHits,
              "downloadUrl": downloadUrl }
