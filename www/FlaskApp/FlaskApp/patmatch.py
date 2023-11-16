@@ -1,3 +1,4 @@
+import traceback
 import json
 import os
 import hashlib
@@ -477,20 +478,32 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
                                  'desc': desc })
                     line = seqNm + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n"
                 file_content.append(line)
+        except MemoryError as e:
+            error_message += "Memory Error: " + str(e) + "\n"
+            break
+        except OSError as e:
+            error_message += "OS Error: " + str(e) + "\n"
+            continue
         except (IndexError, ValueError) as e:
             # Handle specific errors like IndexError or ValueError
-            error_message = "Error processing row: " + str(row) + "error: " + str(e)
+            error_message += "Error processing row: " + str(row) + "error: " + str(e) + "\n"
             continue
         except Exception as e:
             # Catch any other unforeseen errors
-            error_message = "Unexpected error for row: " + str(row) + "error: " + str(e)
+            error_message += "Unexpected error for row: " + str(row) + "error: " + str(e) + "\n"
+            error_message += "Traceback: " + str(traceback.format_exc()) + "\n"
             continue
     try:
         with open(downloadFile, "w") as fw:
             fw.writelines(file_content)
-    except IOError as e:
-        error_message = "Error writing to file " + downloadFile + ":" + str(e)
-            
+    except MemoryError as e:
+        error_message += "Memory Error during file writing: " + str(e) + "\n"
+    except OSError as e:
+        error_message += "OS Error during file writing: " + str(e) + "\n"
+    except Exception as e:
+        error_message += "Error writing to file " + downloadFile + ":" + str(e)
+        error_message += "Traceback: " + str(traceback.format_exc()) + "\n"
+
     return (newData, uniqueHits, totalHits, error_message)
 
 
