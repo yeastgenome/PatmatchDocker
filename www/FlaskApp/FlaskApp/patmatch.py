@@ -1,3 +1,4 @@
+import traceback
 import json
 import os
 import hashlib
@@ -368,10 +369,13 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
             matchingPattern = pieces[2]
         
             offSet = get_name_offset(beg, recordOffSetList);
+            if not str(offSet).isdigit():
+                continue
             seqBeg = beg - offSet + 1
             seqEnd = end - offSet
-            seqNm = seqNm4offSet[offSet]
-            
+            seqNm = seqNm4offSet.get(offSet, None)
+            if seqNm is None:
+                continue
             if begMatch == 1 and seqBeg != 1:
                 continue
             if endMatch == 1 and seqEnd != seqNm2length[seqNm]:
@@ -384,7 +388,11 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
                 seqNm = seqNm.rstrip(seqNm[-1])
                 
             if 'Not' in datafile:
-                num = int(seqNm.split(':')[1].split('-')[0])
+                # num = int(seqNm.split(':')[1].split('-')[0])
+                pieces = seqNm.split(':')
+                if len(pieces) < 2:
+                    continue
+                num = int(pieces[1].split('-')[0])
                 seqBeg = seqBeg + num -1
                 seqEnd = seqEnd + num -1
                 if seqNm not in seqNm2chr or seqNm not in seqNm2orfs:
@@ -408,54 +416,59 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
             totalHits = totalHits + 1
 
             data.append(row)
-            
-    fw = open(downloadFile, "w")
+
+    file_content = []
+    header_line = ""
+
     if 'Not' in datafile:
-        fw.write("Chromosome\tBetweenORFtoORF\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n")    
+        header_line = "Chromosome\tBetweenORFtoORF\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n"    
     elif 'orf_' in datafile:
-        fw.write("Feature Name\tGene Name\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\tLocusInfo\n")
+        header_line = "Feature Name\tGene Name\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\tLocusInfo\n"
     else:
-        fw.write("Sequence Name\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n")
-    fw.close()
-    
+        header_line = "Sequence Name\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n"
+
+    file_content.append(header_line)
+
     newData = []
 
     data.sort()
 
-    with open(downloadFile, "a") as fw:
-        for row in data:
+    error_message = ''
+    
+    for row in data:
+        try:
             if 'Not' in datafile:
                 [orfs, beg, end, matchPattern, chr, seqNm] = row.split('\t')
                 count = hitCount4seqNm[seqNm]
                 orfs = orfs.strip()
                 newData.append({ 'orfs': orfs,
-                                 'chr': chr,
-                                 'beg': beg,
-                                 'end': end,
-                                 'count': count,
-                                 'seqname': seqNm,
-                                 'matchingPattern': matchPattern })
-                fw.write(chr + "\t" + orfs + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n")
-                continue
-
-            [seqNm, beg, end, matchPattern, gene, sgdid, desc] = row.split('\t')
-        
-            count = hitCount4seqNm.get(seqNm, 0)
-        
-            if sgdid != "":
-                if gene == seqNm:
-                    gene = ""
-                newData.append({ 'seqname': seqNm,
-                                 'beg': beg,
-                                 'end': end,
-                                 'count': count,
-                                 'matchingPattern': matchPattern,
-                                 'gene_name': gene,
-                                 'sgdid': sgdid,
-                                 'desc': desc })
-                fw.write(seqNm + "\t" + gene + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\t" + desc + "\n")
+                             'chr': chr,
+                             'beg': beg,
+                             'end': end,
+                             'count': count,
+                             'seqname': seqNm,
+                             'matchingPattern': matchPattern })
+                line = chr + "\t" + orfs + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n"
             else:
-                newData.append({ 'seqname': seqNm,
+
+                [seqNm, beg, end, matchPattern, gene, sgdid, desc] = row.split('\t')
+        
+                count = hitCount4seqNm.get(seqNm, 0)
+        
+                if sgdid != "":
+                    if gene == seqNm:
+                        gene = ""
+                    newData.append({ 'seqname': seqNm,
+                                 'beg': beg,
+                                 'end': end,
+                                 'count': count,
+                                 'matchingPattern': matchPattern,
+                                 'gene_name': gene,
+                                 'sgdid': sgdid,
+                                 'desc': desc })
+                    line = seqNm + "\t" + gene + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\t" + desc + "\n"
+                else:
+                    newData.append({ 'seqname': seqNm,
                                  'gene_name': gene,
                                  'sgdid': sgdid,
                                  'beg': beg,
@@ -463,9 +476,37 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
                                  'count': count,
                                  'matchingPattern': matchPattern,
                                  'desc': desc })
-                fw.write(seqNm + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n")
+                    line = seqNm + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n"
+                file_content.append(line)
+        except MemoryError as e:
+            error_message += "Memory Error: " + str(e) + "\n"
+            break
+        except OSError as e:
+            error_message += "OS Error: " + str(e) + "\n"
+            continue
+        except (IndexError, ValueError) as e:
+            # Handle specific errors like IndexError or ValueError
+            error_message += "Error processing row: " + str(row) + "error: " + str(e) + "\n"
+            continue
+        except Exception as e:
+            # Catch any other unforeseen errors
+            error_message += "Unexpected error for row: " + str(row) + "error: " + str(e) + "\n"
+            error_message += "Traceback: " + str(traceback.format_exc()) + "\n"
+            continue
+    try:
+        with open(downloadFile, "w", encoding='utf-8') as fw:
+            fw.writelines(file_content)
+    except MemoryError as e:
+        error_message += "Memory Error during file writing: " + str(e) + "\n"
+    except OSError as e:
+        error_message += "OS Error during file writing: " + str(e) + "\n"
+    except UnicodeEncodeError as e:
+        error_message += "Unicode Encoding Error: " + str(e) + "\n"
+    except Exception as e:
+        error_message += "Error writing to file " + downloadFile + ":" + str(e)
+        error_message += "Traceback: " + str(traceback.format_exc()) + "\n"
 
-    return (newData, uniqueHits, totalHits)
+    return (newData, uniqueHits, totalHits, error_message)
 
 
 def run_patmatch(request, id):
@@ -543,9 +584,9 @@ def run_patmatch(request, id):
     #         "recordOffSetlist": recordOffSetList,
     #         "seqNm4offSet": seqNm4offSet }
     
-    (data, uniqueHits, totalHits) = process_output(recordOffSetList, seqNm4offSet, output,
-                                                   datafile, get_param(request, 'max_hits'),
-                                                   begMatch, endMatch, downloadFile)
+    (data, uniqueHits, totalHits, error_message) = process_output(recordOffSetList, seqNm4offSet, output,
+                                                                  datafile, get_param(request, 'max_hits'),
+                                                                  begMatch, endMatch, downloadFile)
 
     downloadUrl = ''
     if uniqueHits > 0:
@@ -554,7 +595,8 @@ def run_patmatch(request, id):
     return { "hits": data,
              "uniqueHits": uniqueHits,
              "totalHits": totalHits,
-             "downloadUrl": downloadUrl }
+             "downloadUrl": downloadUrl,
+             "error_message": error_message }
     
     
 
