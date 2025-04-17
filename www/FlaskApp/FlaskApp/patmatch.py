@@ -6,6 +6,7 @@ from pathlib import Path
 import boto3
 import time
 import threading
+import re
 
 from flask import send_from_directory, Response
 
@@ -273,13 +274,21 @@ def get_param(request, name, default=None):
 
     
 def cleanup_pattern(pattern):
-    
+    """
     pattern = pattern.replace('%28', '(').replace('%29', ')')
     pattern = pattern.replace('%7B', '{').replace('%7D', '}')
     pattern = pattern.replace('%5B', '[').replace('%5D', ']')
     patteern = pattern.replace('%2C', ',')
-    
+    """
+    # decode common URL‐escapes
+    pattern = (pattern
+               .replace('%28', '(').replace('%29', ')')
+               .replace('%7B', '{').replace('%7D', '}')
+               .replace('%5B', '[').replace('%5D', ']')
+               .replace('%2C', ',')
+               .replace('%5E', '^'))
     return pattern
+
 
 def set_seq_length(seqNm2length, datafile):
 
@@ -303,12 +312,18 @@ def set_seq_length(seqNm2length, datafile):
             seq = seq.rstrip(seq[-1])
         seqNm2length[preSeqNm] = len(seq)
     f.close()
+
     
-def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, begMatch, endMatch, downloadFile):
+def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, begMatch, endMatch, downloadFile, original_pattern):
 
     seqNm2length = {}
     if endMatch == 1:
         set_seq_length(seqNm2length, datafile)
+
+    excluded_chars = set()
+    for m in re.finditer(r'\[\^([^\]]+)\]', original_pattern):
+        excluded_chars.update(m.group(1))
+    has_exclusion = bool(excluded_chars)
     
     name2data = {}
     if 'orf_' in datafile:
@@ -367,7 +382,12 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
             beg = int(pieces[0])
             end = int(pieces[1])
             matchingPattern = pieces[2]
-        
+
+            # if we saw any [^…] in the user’s pattern,
+            # drop *any* match containing those letters
+            if has_exclusion and any(ch in excluded_chars for ch in matchingPattern):
+                continue
+            
             offSet = get_name_offset(beg, recordOffSetList);
             if not str(offSet).isdigit():
                 continue
@@ -586,7 +606,7 @@ def run_patmatch(request, id):
     
     (data, uniqueHits, totalHits, error_message) = process_output(recordOffSetList, seqNm4offSet, output,
                                                                   datafile, get_param(request, 'max_hits'),
-                                                                  begMatch, endMatch, downloadFile)
+                                                                  begMatch, endMatch, downloadFile, pattern)
 
     downloadUrl = ''
     if uniqueHits > 0:
