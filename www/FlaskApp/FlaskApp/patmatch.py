@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import traceback
 import json
 import os
@@ -6,6 +7,7 @@ from pathlib import Path
 import boto3
 import time
 import threading
+import re
 
 from flask import send_from_directory, Response
 
@@ -36,6 +38,7 @@ def clean_up_temp_files():
         if os.stat(file).st_mtime < now - day * 86400:
             if os.path.isfile(file):
                 os.remove(file)
+
 
 def upload_file_to_s3_async(file, filename):
     """
@@ -273,13 +276,21 @@ def get_param(request, name, default=None):
 
     
 def cleanup_pattern(pattern):
-    
+    """
     pattern = pattern.replace('%28', '(').replace('%29', ')')
     pattern = pattern.replace('%7B', '{').replace('%7D', '}')
     pattern = pattern.replace('%5B', '[').replace('%5D', ']')
     patteern = pattern.replace('%2C', ',')
-    
+    """
+    # decode common URL‐escapes
+    pattern = (pattern
+               .replace('%28', '(').replace('%29', ')')
+               .replace('%7B', '{').replace('%7D', '}')
+               .replace('%5B', '[').replace('%5D', ']')
+               .replace('%2C', ',')
+               .replace('%5E', '^'))
     return pattern
+
 
 def set_seq_length(seqNm2length, datafile):
 
@@ -303,13 +314,71 @@ def set_seq_length(seqNm2length, datafile):
             seq = seq.rstrip(seq[-1])
         seqNm2length[preSeqNm] = len(seq)
     f.close()
+
+
+def find_exclusion_offset(pattern):
+    # Improved regex to tokenize character classes, quantified atoms, and literals
+    token_re = r'\[[^\]]+\]|.(?:[*+?]|\{\d*(?:,\d*)?\})?'
+    tokens = re.findall(token_re, pattern)
     
-def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, begMatch, endMatch, downloadFile):
+    # Find the first negated character class [^...]
+    excl_idx = next((i for i, t in enumerate(tokens) if t.startswith('[^')), None)
+    if excl_idx is None:
+        return None
+    
+    offset = 0
+    for tok in tokens[:excl_idx]:
+        if tok.startswith('['):
+            # Character class always matches 1 character
+            offset += 1
+        else:
+            # Handle quantified atoms and literals
+            if len(tok) == 1:
+                # Single character with no quantifier
+                offset += 1
+            else:
+                # Extract quantifier and determine minimal repeats
+                quant = tok[1:]
+                if quant == '*':
+                    min_repeats = 0
+                elif quant == '+':
+                    min_repeats = 1
+                elif quant == '?':
+                    min_repeats = 0
+                elif quant.startswith('{'):
+                    # Parse {n}, {n,m}, {n,}, {,m} cases
+                    quant = quant.strip('{}').split(',')
+                    try:
+                        # Minimum is first number or 0 if empty
+                        min_repeats = int(quant[0]) if quant[0] else 0
+                    except (ValueError, IndexError):
+                        # Invalid format, assume minimum 0
+                        min_repeats = 0
+                else:
+                    # Non-quantifier suffix (shouldn't occur with proper tokenization)
+                    min_repeats = 1
+                offset += min_repeats
+                
+    return offset
+
+    
+def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, begMatch, endMatch, downloadFile, original_pattern):
 
     seqNm2length = {}
     if endMatch == 1:
         set_seq_length(seqNm2length, datafile)
-    
+
+    # excluded_offset = find_exclusion_offset(pattern)
+
+    # Track exclusion positions and their characters
+    exclusion_positions = []
+    for m in re.finditer(r'\[\^([^\]]+)\]', original_pattern):
+        exclusion_pos_pos = find_exclusion_offset(m.string[:m.start()])  # Position of this [^...]
+        exclusion_positions.append( (exclusion_pos_pos, set(m.group(1))) )
+
+    # for m in re.finditer(r'\[\^([^\]]+)\]', original_pattern):
+    #    excluded_chars.update(m.group(1))
+
     name2data = {}
     if 'orf_' in datafile:
         with open(dataDir + "locus.txt", encoding="utf-8") as f:
@@ -367,7 +436,17 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
             beg = int(pieces[0])
             end = int(pieces[1])
             matchingPattern = pieces[2]
-        
+
+            # Check all exclusion positions
+            exclude_match = False
+            for pos, chars in exclusion_positions:
+                if pos is not None and pos < len(matchingPattern):
+                    if matchingPattern[pos] in chars:
+                        exclude_match = True
+                        break
+            if exclude_match:
+                continue
+                        
             offSet = get_name_offset(beg, recordOffSetList);
             if not str(offSet).isdigit():
                 continue
@@ -586,7 +665,7 @@ def run_patmatch(request, id):
     
     (data, uniqueHits, totalHits, error_message) = process_output(recordOffSetList, seqNm4offSet, output,
                                                                   datafile, get_param(request, 'max_hits'),
-                                                                  begMatch, endMatch, downloadFile)
+                                                                  begMatch, endMatch, downloadFile, pattern)
 
     downloadUrl = ''
     if uniqueHits > 0:
