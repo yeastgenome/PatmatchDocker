@@ -20,6 +20,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
         net-tools \
 	python3-boto3 \
 	python3-flask \
+ 	python3-flask-cors \
         python3-pip \
 	python3-virtualenv \
     && rm -rf /var/lib/apt/lists/*
