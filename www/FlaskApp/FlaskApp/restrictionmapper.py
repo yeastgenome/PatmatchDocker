@@ -3,311 +3,340 @@ import os
 import re
 from patmatch import get_downloadUrl
 
-# Directories and executables
-enzymedir = '/data/restriction_mapper/'
 binDir = '/var/www/bin/'
-dataDir = enzymedir
+dataDir = '/data/restriction_mapper/'
 tmpDir = "/var/www/tmp/"
-scan4matches = os.path.join(binDir, "scan_for_matches")
-fastafile = os.path.join(dataDir, "orf_genomic.seq")
 
-
-def normalize_mode(enzymetype: str) -> str:
-    """
-    Derive a canonical mode string for filtering:
-      - "all"
-      - "six-base"
-      - "3' overhang"
-      - "5' overhang"
-      - "blunt end"
-    """
-    et = enzymetype.lower().replace('+', ' ').replace('%27', "'").strip()
-    if et in ('', 'all'):
-        return 'all'
-    if 'six-base' in et:
-        return 'six-base'
-    if et.startswith("3'") or et.startswith('3') or '3 overhang' in et:
-        return "3' overhang"
-    if et.startswith("5'") or et.startswith('5') or '5 overhang' in et:
-        return "5' overhang"
-    if 'blunt' in et:
-        return 'blunt end'
-    # fallback to all\ n    return 'all'
-
+scan4matches = binDir + "scan_for_matches"
+fastafile = dataDir + "orf_genomic.seq"
 
 def get_downloadURLs(cutSiteFile, notCutFile):
+
     return (get_downloadUrl(cutSiteFile), get_downloadUrl(notCutFile))
-
-
+    
 def get_sequence(name):
-    name = name.replace('SGD:', '')
-    seq = ''
-    defline = ''
-    with open(fastafile, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith('>'):
-                pieces = line.split(' ')
-                if (pieces[0].lstrip('>').lower() == name.lower() or
-                    any(p.lower() == name.lower() for p in pieces[1:3])):
-                    defline = line
-                continue
-            if defline:
-                seq = line
-                break
-    defline = defline.replace('"', "'") or '>Unnamed sequence'
-    return defline, seq
 
+    name = name.replace('SGD:', '')
+
+    f = open(fastafile, encoding="utf-8")
+    
+    seq = ""
+    defline = ""
+    for line in f:
+        line = line.strip()
+        if line.startswith('>'):
+            pieces = line.split(' ')
+            if pieces[0].replace('>', '').lower() == name.lower() or pieces[1].lower() == name.lower() or pieces[2].replace('SGDID:', '').replace(',', '').lower() == name.lower():
+                defline = line
+            continue
+        elif defline != '':
+            seq = line
+        if seq != '':
+            break
+
+    f.close()
+
+    defline = defline.replace('"', "'")
+    
+    return (defline, seq)
 
 def write_seqfile(defline, seq, seqfile):
-    # sanitize sequence: keep only letters
-    seq_clean = re.sub('[^a-zA-Z]', '', seq)
-    with open(seqfile, 'w') as fw:
-        fw.write(defline + "\n")
-        fw.write(seq_clean + "\n")
+    
+    fw = open(seqfile, "w")
 
-    seqNm = 'Unnamed'
-    chrCoords = ''
-    if 'SGDID:' in defline and 'Genome Release' in defline:
-        parts = defline.lstrip('>').split(' ')
-        systematic = parts[0]
-        gene = parts[1]
+    ## remove all non-alphabet chars from seq string
+    regex = re.compile('[^a-zA-Z]')
+    seq = regex.sub('', seq)
+        
+    fw.write(defline + "\n")
+    fw.write(seq + "\n")
+    fw.close()
+
+    seqNm = "Unnamed"
+    chrCoords = ""
+    # >YAL067C SEO1 SGDID:S000000062, Chr I from 9016-7235, Genome Release ...
+    if "SGDID:" in defline and 'Genome Release' in defline:
+        pieces = defline.replace('>', '').split(' ')
+        systematic_name = pieces[0]
+        gene_name = pieces[1]
         chrCoords = defline.split(', ')[1]
-        seqNm = f"{gene}/{systematic}" if gene else systematic
+        seqNm = systematic_name
+        if gene_name:
+            seqNm = gene_name + "/" + systematic_name
 
-    return seqNm, chrCoords, len(seq_clean)
-
+    return (seqNm, chrCoords, len(seq))
 
 def set_enzyme_file(enzymetype):
-    mode = normalize_mode(enzymetype)
-    if mode == 'six-base':
-        filename = 'rest_enzymes.6base'
-    elif mode == "3' overhang":
-        filename = 'rest_enzymes.3'
-    elif mode == "5' overhang":
-        filename = 'rest_enzymes.5'
-    elif mode == 'blunt end':
-        filename = 'rest_enzymes.blunt'
-    else:
-        filename = 'rest_enzymes.all'
-    return os.path.join(dataDir, filename)
 
+    if enzymetype is None:
+        return dataDir + 'rest_enzymes'
+
+    if "Six-base" in enzymetype:
+        return dataDir + 'rest_enzymes.6base'
+
+    if "blunt" in enzymetype:
+        return dataDir + 'rest_enzymes.blunt'
+    
+    if "3" in enzymetype:
+        return dataDir + 'rest_enzymes.3'
+
+    if "5" in enzymetype:
+        return dataDir + 'rest_enzymes.5'
+    
+    return dataDir + 'rest_enzymes'
 
 def do_search(enzymefile, patfile, outfile, seqfile):
-    if not os.path.isfile(enzymefile):
-        return f"Error: enzyme file not found: {enzymefile}"
 
-    # clear output
-    open(outfile, 'w').close()
-    error_msg = ''
+    f = open(enzymefile, encoding="utf-8")
 
-    with open(enzymefile, encoding='utf-8') as f:
-        for line in f:
-            enzyme, offset, pat, overhang = line.strip().split(' ')
-            # write pattern
-            with open(patfile, 'w') as fw:
-                fw.write(pat + '\n')
-            with open(outfile, 'a') as fw:
-                fw.write(f">>{enzyme}: {offset} {overhang} {pat}\n")
-            cmd = f"{scan4matches} -c {patfile} < {seqfile} >> {outfile}"
-            if os.system(cmd) < 0:
-                error_msg = f"RestrictionMapper: problem running {scan4matches} returned {err}"
-                break
+    ## reset file
+    fw = open(outfile, "w")
+    fw.close()
+    
+    error_msg = ""
+    for line in f:
+
+        pieces = line.strip().split(' ')
+        enzyme = pieces[0]
+        offset = pieces[1]
+        pat = pieces[2]
+        overhang = pieces[3]
+        fw = open(patfile, "w")
+        fw.write(pat + "\n")
+        fw.close()
+        fw = open(outfile, "a")
+        fw.write(">>" + enzyme + ": " + str(offset) + " " + overhang + " " + pat + "\n")
+        fw.close()
+
+        cmd = scan4matches + " -c " + patfile + " < " + seqfile + " >> " + outfile
+        err = os.system(cmd)
+        
+        if err < 0: 
+            error_msg = "RestrmictionMapper: problem running " + scan4matches + " returned " + str(err)
+            break
+        
+    f.close()
 
     if error_msg:
         return error_msg
-    return '' if os.path.isfile(outfile) else f"No {outfile} generated in do_search!"
-
+    
+    if os.path.isfile(outfile):
+        return ""
+    else:
+        return "No " + outfile + " generated in do_search!"
 
 def set_enzyme_types(enzymeHash, enzymeType):
-    data_files = {
-        "3' overhang": 'rest_enzymes.3',
-        "5' overhang": 'rest_enzymes.5',
-        'blunt end': 'rest_enzymes.blunt',
-    }
-    fname = data_files.get(enzymeType)
-    if not fname:
-        return
-    path = os.path.join(dataDir, fname)
-    if not os.path.isfile(path):
-        return
-    with open(path, encoding='utf-8') as f:
-        for line in f:
-            key = line.strip().split(' ')[0]
-            enzymeHash[key] = enzymeType
 
+    enzymeFile = "rest_enzymes.blunt"
+    if '3' in enzymeType:
+        enzymeFile = "rest_enzymes.3"
+    elif '5' in enzymeType:
+        enzymeFile = "rest_enzymes.5"
 
+    f = open(dataDir + enzymeFile, encoding="utf-8")
+    for line in f:
+        pieces = line.strip().split(' ')
+        enzymeHash[pieces[0]] = enzymeType
+    f.close()
+    
 def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut):
-    # parse results
+
     dataHash = {}
-    notCutEnzyme = []
     offset = {}
     overhang = {}
     recognition_seq = {}
+    notCutEnzyme = []
+    
+    f = open(outfile, encoding="utf-8") 
+    preLine = ''
+    enzyme = ''
+    
+    for line in f:
+        if line.startswith('>>'):
+            pieces = line.strip().split(' ')
+            enzyme = pieces[0].replace('>>', '').replace(':', '')
+            offset[enzyme] = pieces[1]
+            overhang[enzyme] = pieces[2]
+            recognition_seq[enzyme] = pieces[3]
+            if enzymetype.lower() == 'all' or enzymetype == '' or enzymetype.lower().startswith('enzymes that do not'):
+                if preLine.startswith('>>'):
+                    pieces = preLine.replace('>>', '').replace(':', '').split(' ')
+                    if pieces[0] not in notCutEnzyme:
+                        notCutEnzyme.append(pieces[0])
+        elif line.startswith('>'):
+            # (/\>.+\[([0-9]+\,[0-9]+)\]$/) {
+            coords = line.strip().split(':')[1].replace('[', '').replace(']', '')
+            if enzyme in dataHash:
+                dataHash[enzyme] = dataHash[enzyme] + ':' + coords
+            else:
+                dataHash[enzyme] = coords 
+        preLine = line.strip()
+    
+    f.close()
 
-    with open(outfile, encoding='utf-8') as f:
-        preLine = ''
-        enzyme = ''
-        for line in f:
-            if line.startswith('>>'):
-                parts = line.strip().split(' ')
-                enzyme = parts[0].lstrip('>>').rstrip(':')
-                offset[enzyme] = parts[1]
-                overhang[enzyme] = parts[2]
-                recognition_seq[enzyme] = parts[3]
-                if enzymetype.lower().startswith('enzymes that do not'):
-                    if preLine.startswith('>>'):
-                        prev = preLine.lstrip('>>').rstrip(':').split(' ')[0]
-                        if prev not in notCutEnzyme:
-                            notCutEnzyme.append(prev)
-            elif line.startswith('>'):
-                coords = line.split('[')[-1].rstrip(']\n').replace(',', ',')
-                dataHash.setdefault(enzyme, coords)
-                if enzyme in dataHash:
-                    dataHash[enzyme] += ':' + coords
-            preLine = line.strip()
+    if enzymetype.lower() == 'all' or enzymetype == '' or enzymetype.lower().startswith('enzymes that do not'):
+        if preLine.startswith('>>'):
+            pieces = preLine.replace('>>', '').replace(':', '').split(' ')
+            if pieces[0] not in	notCutEnzyme:
+                notCutEnzyme.append(pieces[0])
+                
+    fw = open(downloadfile4notCut, 'w')
+    notCutEnzyme.sort()
+    for enzyme in notCutEnzyme:
+        fw.write(enzyme + "\n")
+    fw.close()
 
-    # finalize not-cut list
-    if notCutEnzyme and not fake: pass  # removed for brevity
+    if enzymetype.startswith('enzymes that do not'):
+         return ({}, notCutEnzyme)
 
-    mode = normalize_mode(enzymetype)
-
-    # if non-cut mode
-    if enzymetype.lower().startswith('enzymes that do not'):
-        with open(downloadfile4notCut, 'w') as fw:
-            for e in sorted(notCutEnzyme): fw.write(e + '\n')
-        return {}, notCutEnzyme
-
-    # apply cut count filter for "cut" modes
-    if 'cut' in enzymetype.lower():
-        limit = 2 if 'twice' in enzymetype.lower() else 1
-        filtered = {}
-        for key, coords_str in dataHash.items():
-            wCuts, cCuts = 0, 0
-            for pair in coords_str.split(':'):
-                b, e = map(int, pair.split(','))
-                if b < e: wCuts += 1
-                else: cCuts += 1
-            if (wCuts == limit and cCuts <= limit) or (cCuts == limit and wCuts <= limit):
-                filtered[key] = coords_str
-        dataHash = filtered
-
-    # build enzyme_type map
-    enzyme_type = {}
-    for etype in ("3' overhang", "5' overhang", 'blunt end'):
-        set_enzyme_types(enzyme_type, etype)
-
-    # write cut-site output header
-    with open(downloadfile4cutSite, 'w') as fw:
-        fw.write(
-            "Enzyme\toffset (bp)\toverhang (bp)\trecognition sequence\t"
-            "enzyme type\tnumber of cuts\tordered fragment size\t"
-            "sorted fragment size\tcut site on watson strand\tcut site on crick strand\n"
-        )
-
-    result = {}
-    cutList = []
-    with open(downloadfile4cutSite, 'a') as fw:
-        for enzyme in sorted(dataHash):
-            # filter by mode if needed
-            if mode not in ('all', 'six-base') and enzyme_type.get(enzyme) != mode:
-                continue
-
-            coords_all = []
-            cutW = []
-            cutC = []
-            for pair in dataHash[enzyme].split(':'):
-                b, e = map(int, pair.split(','))
-                if b < e:
-                    site = b + int(offset[enzyme]) - 1
-                    cutW.append(site)
+    if "cut" in enzymetype:
+         
+        cutLimit = 1
+        if 'twice' in enzymetype:
+            cutLimit = 2
+        
+        newDataHash = {}
+        for key in dataHash:
+            coords = dataHash[key].split(':')
+            wCut = 0
+            cCut = 0
+            for coordPair in coords:
+                [beg, end] = coordPair.split(',')
+                beg = int(beg)
+                end = int(end)
+                if beg < end: 
+                    wCut = wCut + 1
                 else:
-                    site = min(b, e) + int(offset[enzyme]) + int(overhang[enzyme]) - 1
-                    cutC.append(site)
-                coords_all.append(site)
+                    cCut = cCut + 1
+            if (cCut == cutLimit and wCut <= cutLimit) or (wCut == cutLimit and cCut <= cutLimit):
+                newDataHash[key] = dataHash[key]
+        dataHash = newDataHash
+    
+    enzyme_type = {}
 
-            coords_all.append(seqLen)
-            coords_all.sort()
+    set_enzyme_types(enzyme_type, "3' overhang")
+    set_enzyme_types(enzyme_type, "5' overhang")
+    set_enzyme_types(enzyme_type, "blunt end")
 
-            # fragment sizes
-            fragments = []
-            prev = 0
-            for c in coords_all:
-                size = c - prev
-                if size > 0:
-                    fragments.append(size)
-                prev = c
+    data = {}
 
-            ordered = ', '.join(map(str, fragments))
-            sorted_frags = ', '.join(map(str, sorted(fragments, reverse=True)))
-            fw.write(
-                f"{enzyme}\t{offset[enzyme]}\t{overhang[enzyme]}\t"
-                f"{recognition_seq[enzyme]}\t{enzyme_type[enzyme]}\t"
-                f"{len(fragments)-1}\t{ordered}\t{sorted_frags}\t"
-                f"{', '.join(map(str, cutW))}\t{', '.join(map(str, cutC))}\n"
-            )
+    fw = open(downloadfile4cutSite, 'w')
+    fw.write("Enzyme\toffset (bp)\toverhang (bp)\trecognition sequence\tenzyme type\tnumber of cuts\tordered fragment size\tsorted fragment size\tcut site on watson strand\tcut site on crick strand\n")
 
-            result[enzyme] = {
-                'offset': offset[enzyme],
-                'overhang': overhang[enzyme],
-                'recognition_seq': recognition_seq[enzyme],
-                'enzyme_type': enzyme_type[enzyme],
-                'cut_site_on_watson_strand': ', '.join(map(str, cutW)),
-                'cut_site_on_crick_strand': ', '.join(map(str, cutC)),
-                'fragment_size_in_real_order': ordered,
-                'fragment_size': sorted_frags,
-            }
+    for enzyme in sorted (dataHash):
+        if ("overhang" in enzymetype or "blunt" in enzymetype) and enzyme_type[enzyme] != enzymetype:
+            continue
+        cutW = []
+        cutC = []
+        cutPositions = dataHash[enzyme].split(':')
+        cutAll = []
+        for position in cutPositions:
+            [beg, end] = position.split(',')
+            cutSite = None
+            beg = int(beg)
+            end = int(end)
+            if beg < end: # watson strand
+                cutSite = beg + int(offset[enzyme]) - 1
+                if cutSite not in cutW:
+                    cutW.append(cutSite)
+            else:  # crick strand
+                [beg, end] = [end, beg]            
+                # enzymeType = enzyme_type[enzyme]
+                cutSite = beg + int(offset[enzyme]) + int(overhang[enzyme]) - 1
+                if cutSite not in cutC:
+                    cutC.append(cutSite)
+            if cutSite not in cutAll:
+                cutAll.append(cutSite)
+        cutAll.append(seqLen)
+        
+        preCutSite = 0
+        found = {}
+        cutFragments = []
 
-    return result, notCutEnzyme
+        for cutSite in sorted(cutAll, key=int):
+            cutSize = cutSite - preCutSite
+            if cutSize != 0 and cutSize not in found:
+                cutFragments.append(cutSize)
+                found[cutSize] = 1
+            preCutSite = cutSite
+
+        cutSiteW = ", ".join([str(x) for x in sorted(cutW, key=int)])
+        cutSiteC = ", ".join([str(x) for x in sorted(cutC, key=int)])
+        fragmentsReal = ", ".join([str(x) for x in cutFragments])
+        fragments = ", ".join([str(x) for x in sorted(cutFragments, key=int, reverse=True)])
+        cutNum = len(cutFragments) - 1
+
+        fw.write(enzyme + "\t" + str(offset[enzyme]) + "\t" + str(overhang[enzyme]) + "\t" + recognition_seq[enzyme] + "\t" + enzyme_type[enzyme] + "\t" + str(cutNum) + "\t" + fragmentsReal + "\t" + fragments + "\t" + cutSiteW + "\t" + cutSiteC + "\n")
+
+        data[enzyme] =  {  "cut_site_on_watson_strand": cutSiteW,
+                           "cut_site_on_crick_strand": cutSiteC,
+                           "fragment_size": fragments,
+                           "fragment_size_in_real_order": fragmentsReal,
+                           "offset": offset[enzyme],
+                           "overhang": overhang[enzyme],
+                           "recognition_seq": recognition_seq[enzyme],
+                           "enzyme_type": enzyme_type[enzyme]  }
+    
+    fw.close()
+    
+    return (data, notCutEnzyme)
 
 
 def run_restriction_site_search(request, id):
-    patfile = os.path.join(tmpDir, f"patfile.{id}.txt")
-    outfile = os.path.join(tmpDir, f"outfile.{id}.txt")
-    seqfile = os.path.join(tmpDir, f"seqfile.{id}.txt")
 
-    cutSiteName = f"restrictionmapper.{id}"
-    notCutName = f"restrictionmapper_not_cut_enzyme.{id}"
-    downloadfile4cutSite = os.path.join(tmpDir, cutSiteName)
-    downloadfile4notCut = os.path.join(tmpDir, notCutName)
+    patfile = tmpDir + "patfile." + id + ".txt"
+    outfile = tmpDir + "outfile." + id + ".txt"
+    seqfile = tmpDir + "seqfile." + id + ".txt"
+
+    cutSiteFile = "restrictionmapper." + id
+    notCutFile = "restrictionmapper_not_cut_enzyme." + id
+
+    downloadfile4cutSite = tmpDir + cutSiteFile
+    downloadfile4notCut = tmpDir + notCutFile
 
     p = request.args
     f = request.form
-    seq = f.get('seq') or p.get('seq')
-    name = f.get('name') or p.get('name')
-    enzymetype = (f.get('type') or p.get('type', 'all'))
 
-    mode = normalize_mode(enzymetype)
+    seq = f.get('seq') if f.get('seq') else p.get('seq')
+    name = f.get('name') if f.get('name') else p.get('name')
+    enzymetype = f.get('type') if f.get('type') else p.get('type', 'ALL')
+    enzymetype = enzymetype.replace('+', ' ').replace("%27", "'")
 
+    if enzymetype.startswith('3'):
+        enzymetype = "3' overhang"
+    elif enzymetype.startswith('5'):
+        enzymetype = "5' overhang"
+
+    defline = None
     if seq:
         defline = ">Unnamed sequence"
     else:
-        defline, seq = get_sequence(name)
+        (defline, seq) = get_sequence(name)
 
-    seqNm, chrCoords, seqLen = write_seqfile(defline, seq, seqfile)
+    (seqNm, chrCoords, seqLen) = write_seqfile(defline, seq, seqfile)
+    
     enzymefile = set_enzyme_file(enzymetype)
-
+    
     err = do_search(enzymefile, patfile, outfile, seqfile)
-    if err:
-        return {
-            "ERROR": err,
-            "seqName": seqNm,
-            "chrCoords": chrCoords,
-            "seqLength": seqLen,
-            "notCutEnzyme": [],
-            "downloadUrl": '',
-            "downloadUrl4notCutEnzyme": ''
-        }
 
-    data, notCutList = process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut)
-    url_cut, url_not = get_downloadURLs(cutSiteName, notCutName)
-
-    return {
-        "data": data,
-        "seqName": seqNm,
-        "chrCoords": chrCoords,
-        "seqLength": seqLen,
-        "notCutEnzyme": notCutList,
-        "downloadUrl": url_cut,
-        "downloadUrl4notCutEnzyme": url_not
-    }
+    if err == '':
+        ## key is the enzyme
+        (data, notCutEnzymeList) = process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut)
+        (downloadUrl4cutSite, downloadUrl4notCut) = get_downloadURLs(cutSiteFile, notCutFile)
+        
+        return { "data": data,
+                 "seqName": seqNm,
+                 "chrCoords": chrCoords,
+                 "seqLength": seqLen,
+                 "notCutEnzyme": notCutEnzymeList,
+                 "downloadUrl": downloadUrl4cutSite,
+                 "downloadUrl4notCutEnzyme": downloadUrl4notCut }
+    else:
+        return { "ERROR": err,
+                 "seqName": seqNm,
+                 "chrCoords": chrCoords,
+                 "seqLength": seqLen,
+                 "notCutEnzyme": [],
+                 "downloadUrl": '',
+                 "downloadUrl4notCutEnzyme": '' }
+    
