@@ -302,6 +302,11 @@ def run_restriction_site_search(request, id):
     enzymetype = f.get('type') if f.get('type') else p.get('type', 'ALL')
     enzymetype = enzymetype.replace('+', ' ').replace("%27", "'")
 
+    if enzymetype.startswith('3'):
+        enzymetype = "3' overhang"
+    elif enzymetype.startswith('5'):
+        enzymetype = "5' overhang"
+
     defline = None
     if seq:
         defline = ">Unnamed sequence"

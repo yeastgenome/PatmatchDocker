@@ -1,13 +1,15 @@
-FROM ubuntu:20.04 as builder
+FROM ubuntu:24.04 as builder
 
 RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y git wget \
     && DEBIAN_FRONTEND=noninteractive apt-get autoremove \
     && git clone https://github.com/yeastgenome/PatmatchDocker.git
 
+WORKDIR /PatmatchDocker
+
 #####
 
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 
 RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
@@ -15,11 +17,11 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
         apache2 \
         libapache2-mod-wsgi-py3 \
         net-tools \
+	python3-boto3 \
+	python3-flask \
+ 	python3-flask-cors \
         python3-pip \
-    && pip3 install Flask \
-    && pip3 install -U flask-cors \
-    && pip3 install virtualenv \
-    && pip3 install boto3 \
+	python3-virtualenv \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /PatmatchDocker/www /var/www
@@ -29,7 +31,6 @@ WORKDIR /var/www/tmp
 WORKDIR /var/www/FlaskApp/FlaskApp/static
 WORKDIR /var/www/FlaskApp/FlaskApp/venv
 WORKDIR /var/www/FlaskApp/FlaskApp
-
 RUN chmod 1777 /var/www/tmp \
     && a2enmod wsgi \
     && a2ensite FlaskApp \
