@@ -6,7 +6,6 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     && git clone https://github.com/yeastgenome/PatmatchDocker.git
 
 WORKDIR /PatmatchDocker
-RUN git checkout restrictionmapper_fix_6542
 
 #####
 
