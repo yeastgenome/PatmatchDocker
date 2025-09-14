@@ -158,7 +158,8 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
             offset[enzyme] = pieces[1]
             overhang[enzyme] = pieces[2]
             recognition_seq[enzyme] = pieces[3]
-            if enzymetype.lower() == 'all' or enzymetype == '' or enzymetype.lower().startswith('enzymes that do not'):
+            if enzymetype.lower() == 'all' or enzymetype == '' or (
+                    enzymetype.lower().startswith('enzymes') and 'not' in enzymetype.lower()):
                 if preLine.startswith('>>'):
                     pieces = preLine.replace('>>', '').replace(':', '').split(' ')
                     if pieces[0] not in notCutEnzyme:
@@ -174,7 +175,8 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
     
     f.close()
 
-    if enzymetype.lower() == 'all' or enzymetype == '' or enzymetype.lower().startswith('enzymes that do not'):
+    if enzymetype.lower() == 'all' or enzymetype == '' or (
+            enzymetype.lower().startswith('enzymes') and 'not' in enzymetype.lower()):
         if preLine.startswith('>>'):
             pieces = preLine.replace('>>', '').replace(':', '').split(' ')
             if pieces[0] not in	notCutEnzyme:
@@ -186,8 +188,8 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
         fw.write(enzyme + "\n")
     fw.close()
 
-    if enzymetype.startswith('enzymes that do not'):
-         return ({}, notCutEnzyme)
+    if enzymetype.lower().startswith('enzymes') and 'not' in enzymetype.lower():
+        return ({}, notCutEnzyme)
 
     if "cut" in enzymetype:
          
