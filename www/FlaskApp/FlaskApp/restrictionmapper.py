@@ -138,153 +138,8 @@ def set_enzyme_types(enzymeHash, enzymeType):
         pieces = line.strip().split(' ')
         enzymeHash[pieces[0]] = enzymeType
     f.close()
-
-def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut):
-    # --- normalize enzyme type once (case-insensitive, whitespace-safe) ---
-    etype = (enzymetype or '').strip().lower()
-
-    dataHash = {}
-    offset = {}
-    overhang = {}
-    recognition_seq = {}
-    notCutEnzyme = []
-    all_enzymes = []  # Track all enzymes we encounter
-
-    f = open(outfile, encoding="utf-8")
-    enzyme = ''
-
-    # First pass: collect all enzymes and track which ones have cuts
-    for line in f:
-        if line.startswith('>>'):
-            pieces = line.strip().split(' ')
-            enzyme = pieces[0].replace('>>', '').replace(':', '')
-            offset[enzyme] = pieces[1]
-            overhang[enzyme] = pieces[2]
-            recognition_seq[enzyme] = pieces[3]
-            all_enzymes.append(enzyme)
-            # Initialize as "no cuts" until we see one
-            if enzyme not in dataHash:
-                dataHash[enzyme] = ''
-        elif line.startswith('>'):
-            # This enzyme has at least one cut
-            coords = line.strip().split(':')[1].replace('[', '').replace(']', '')
-            if dataHash[enzyme]:
-                dataHash[enzyme] = dataHash[enzyme] + ':' + coords
-            else:
-                dataHash[enzyme] = coords
-    f.close()
-
-    # Find enzymes that don't cut (still empty after scanning)
-    for enzyme in all_enzymes:
-        if not dataHash.get(enzyme):  # empty string means no cuts
-            if enzyme not in notCutEnzyme:
-                notCutEnzyme.append(enzyme)
-
-    # Always write the "not cut" download file
-    with open(downloadfile4notCut, 'w') as fw:
-        for enzyme in sorted(notCutEnzyme):
-            fw.write(enzyme + "\n")
-
-    # If the user asked specifically for "enzymes that do not cut", we’re done.
-    if etype.startswith('enzymes that do not'):
-        return ({}, notCutEnzyme)
-
-    # For “cut once/twice …” filters, apply cut-count filtering
-    if 'cut' in etype:
-        cutLimit = 1
-        if 'twice' in etype:
-            cutLimit = 2
-        newDataHash = {}
-        for key, coords_str in dataHash.items():
-            # skip enzymes with no cuts
-            if not coords_str:
-                continue
-            coords = coords_str.split(':')
-            wCut = 0
-            cCut = 0
-            for coordPair in coords:
-                beg, end = coordPair.split(',')
-                beg = int(beg); end = int(end)
-                if beg < end:
-                    wCut += 1
-                else:
-                    cCut += 1
-            if (cCut == cutLimit and wCut <= cutLimit) or (wCut == cutLimit and cCut <= cutLimit):
-                newDataHash[key] = coords_str
-        dataHash = newDataHash
-    # Map enzyme -> type
-    enzyme_type = {}
-    set_enzyme_types(enzyme_type, "3' overhang")
-    set_enzyme_types(enzyme_type, "5' overhang")
-    set_enzyme_types(enzyme_type, "blunt end")
-
-    data = {}
-
-    with open(downloadfile4cutSite, 'w') as fw:
-        fw.write("Enzyme\toffset (bp)\toverhang (bp)\trecognition sequence\tenzyme type\tnumber of cuts\tordered fragment size\tsorted fragment size\tcut site on watson strand\tcut site on crick strand\n")
-
-        for enzyme in sorted(dataHash):
-            # Skip enzymes with no cuts
-            if not dataHash[enzyme]:
-                continue
-
-            et_label = enzyme_type.get(enzyme, 'unknown')  # defensive
-            # If the user picked an overhang/blunt subset, enforce it
-            if ('overhang' in etype or 'blunt' in etype) and et_label.lower() != etype:
-                continue
-
-            cutW, cutC, cutAll = [], [], []
-            for position in dataHash[enzyme].split(':'):
-                beg, end = position.split(',')
-                beg = int(beg); end = int(end)
-                if beg < end:  # watson
-                    cutSite = beg + int(offset[enzyme]) - 1
-                    if cutSite not in cutW:
-                        cutW.append(cutSite)
-                else:  # crick
-                    beg, end = end, beg
-                    cutSite = beg + int(offset[enzyme]) + int(overhang[enzyme]) - 1
-                    if cutSite not in cutC:
-                        cutC.append(cutSite)
-                if cutSite not in cutAll:
-                    cutAll.append(cutSite)
-            cutAll.append(seqLen)
-
-            preCutSite = 0
-            seen = set()
-            cutFragments = []
-            for cutSite in sorted(cutAll):
-                cutSize = cutSite - preCutSite
-                if cutSize and cutSize not in seen:
-                    cutFragments.append(cutSize)
-                    seen.add(cutSize)
-                preCutSite = cutSite
-
-            cutSiteW = ", ".join(str(x) for x in sorted(cutW))
-            cutSiteC = ", ".join(str(x) for x in sorted(cutC))
-            fragmentsReal = ", ".join(str(x) for x in cutFragments)
-            fragments = ", ".join(str(x) for x in sorted(cutFragments, reverse=True))
-            cutNum = len(cutFragments) - 1
-
-            fw.write(
-                f"{enzyme}\t{offset[enzyme]}\t{overhang[enzyme]}\t{recognition_seq[enzyme]}"
-                f"\t{et_label}\t{cutNum}\t{fragmentsReal}\t{fragments}\t{cutSiteW}\t{cutSiteC}\n"
-            )
-
-            data[enzyme] = {
-                "cut_site_on_watson_strand": cutSiteW,
-                "cut_site_on_crick_strand": cutSiteC,
-                "fragment_size": fragments,
-                "fragment_size_in_real_order": fragmentsReal,
-                "offset": offset[enzyme],
-                "overhang": overhang[enzyme],
-                "recognition_seq": recognition_seq[enzyme],
-                "enzyme_type": et_label,
-            }
-
-    return (data, notCutEnzyme)
     
-def process_data_backup(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut):
+def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut):
 
     dataHash = {}
     offset = {}
@@ -303,7 +158,7 @@ def process_data_backup(seqLen, enzymetype, outfile, downloadfile4cutSite, downl
             offset[enzyme] = pieces[1]
             overhang[enzyme] = pieces[2]
             recognition_seq[enzyme] = pieces[3]
-            if enzymetype.lower() == 'all' or enzymetype == '' or enzymetype.lower().startswith('enzymes that do not'):
+            if enzymetype.lower() == 'all' or enzymetype == '' or 'enzymes' in enzymetype.lower():
                 if preLine.startswith('>>'):
                     pieces = preLine.replace('>>', '').replace(':', '').split(' ')
                     if pieces[0] not in notCutEnzyme:
@@ -319,7 +174,7 @@ def process_data_backup(seqLen, enzymetype, outfile, downloadfile4cutSite, downl
     
     f.close()
 
-    if enzymetype.lower() == 'all' or enzymetype == '' or enzymetype.lower().startswith('enzymes that do not'):
+    if enzymetype.lower() == 'all' or enzymetype == '' or 'enzymes' in enzymetype.lower():
         if preLine.startswith('>>'):
             pieces = preLine.replace('>>', '').replace(':', '').split(' ')
             if pieces[0] not in	notCutEnzyme:
@@ -331,7 +186,7 @@ def process_data_backup(seqLen, enzymetype, outfile, downloadfile4cutSite, downl
         fw.write(enzyme + "\n")
     fw.close()
 
-    if enzymetype.startswith('enzymes that do not'):
+    if 'enzymes' in enzymetype.lower():
          return ({}, notCutEnzyme)
 
     if "cut" in enzymetype:
