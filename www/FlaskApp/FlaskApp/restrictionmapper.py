@@ -317,14 +317,15 @@ def run_restriction_site_search(request, id):
     
     enzymefile = set_enzyme_file(enzymetype)
 
-
-    
-    return { "enzymetype": enzymetype, "enzymefile": enzymefile }
-
-
+    # return { "enzymetype": enzymetype, "enzymefile": enzymefile }
 
     err = do_search(enzymefile, patfile, outfile, seqfile)
 
+    return { "enzymetype": enzymetype,
+             "enzymefile": enzymefile,
+             "err": err,
+    }
+ 
     if err == '':
         ## key is the enzyme
         (data, notCutEnzymeList) = process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut)
