@@ -306,8 +306,6 @@ def run_restriction_site_search(request, id):
         enzymetype = "3' overhang"
     elif enzymetype.startswith('5'):
         enzymetype = "5' overhang"
-
-    return { "enzymetype": enzymetype }
         
     defline = None
     if seq:
@@ -318,7 +316,13 @@ def run_restriction_site_search(request, id):
     (seqNm, chrCoords, seqLen) = write_seqfile(defline, seq, seqfile)
     
     enzymefile = set_enzyme_file(enzymetype)
+
+
     
+    return { "enzymetype": enzymetype, "enzymefile": enzymefile }
+
+
+
     err = do_search(enzymefile, patfile, outfile, seqfile)
 
     if err == '':
