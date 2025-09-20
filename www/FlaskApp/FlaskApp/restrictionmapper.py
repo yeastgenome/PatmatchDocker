@@ -10,9 +10,9 @@ tmpDir = "/var/www/tmp/"
 scan4matches = binDir + "scan_for_matches"
 fastafile = dataDir + "orf_genomic.seq"
 
-def get_downloadURLs(cutSiteFile, notCutFile):
-
-    return (get_downloadUrl(cutSiteFile), get_downloadUrl(notCutFile))
+# def get_downloadURLs(cutSiteFile, notCutFile):
+#
+#    return (get_downloadUrl(cutSiteFile), get_downloadUrl(notCutFile))
     
 def get_sequence(name):
 
@@ -470,23 +470,23 @@ def run_restriction_site_search(request, id):
     if err == '':
         ## key is the enzyme
         (data, notCutEnzymeList) = process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut)
-        # (downloadUrl4cutSite, downloadUrl4notCut) = get_downloadURLs(cutSiteFile, notCutFile)
-        downloadUrl4cutSite = cutSiteFile
-        downloadUrl4notCut = notCutFile
-
-        return { "data": data,
-                 "seqName": seqNm,
-                 "chrCoords": chrCoords,
-                 "seqLength": seqLen,
-                 "notCutEnzyme": notCutEnzymeList,
-                 "downloadUrl": downloadUrl4cutSite,
-                 "downloadUrl4notCutEnzyme": downloadUrl4notCut }
+        return {
+            "data": data,
+            "seqName": seqNm,
+            "chrCoords": chrCoords,
+            "seqLength": seqLen,
+            "notCutEnzyme": notCutEnzymeList,
+            "downloadUrl": get_downloadUrl(cutSiteFile),
+            "downloadUrl4notCutEnzyme": get_downloadUrl(notCutFile)
+        }
     else:
-        return { "ERROR": err,
-                 "seqName": seqNm,
-                 "chrCoords": chrCoords,
-                 "seqLength": seqLen,
-                 "notCutEnzyme": [],
-                 "downloadUrl": '',
-                 "downloadUrl4notCutEnzyme": '' }
+        return {
+            "ERROR": err,
+            "seqName": seqNm,
+            "chrCoords": chrCoords,
+            "seqLength": seqLen,
+            "notCutEnzyme": [],
+            "downloadUrl": '',
+            "downloadUrl4notCutEnzyme": ''
+        }
     
