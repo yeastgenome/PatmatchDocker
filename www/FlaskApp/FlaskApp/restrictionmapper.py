@@ -182,8 +182,8 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
                     dataHash[current] = (dataHash.get(current, '') + (':' if current in dataHash else '') + coords)
                     enzymes_with_cuts.add(current)
 
-   #  notCutEnzyme = sorted([e for e in all_enzymes if e not in enzymes_with_cuts])
-   notCutEnzyme = sorted(set(all_enzymes) - enzymes_with_cuts)
+    notCutEnzyme = sorted([e for e in all_enzymes if e not in enzymes_with_cuts])
+    # notCutEnzyme = sorted(set(all_enzymes) - enzymes_with_cuts)
     
     # --- Debug: after parse ---
     if DEBUG and CP == 'PARSE':
