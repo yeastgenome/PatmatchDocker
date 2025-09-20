@@ -174,6 +174,9 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
     
     f.close()
 
+    return (dataHash, notCutEnzyme)
+
+
     if enzymetype.lower() == 'all' or enzymetype == '' or enzymetype.lower().startswith('enzymes that do not'):
         if preLine.startswith('>>'):
             pieces = preLine.replace('>>', '').replace(':', '').split(' ')
