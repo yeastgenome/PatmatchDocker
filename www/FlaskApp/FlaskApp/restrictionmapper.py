@@ -158,7 +158,7 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
             offset[enzyme] = pieces[1]
             overhang[enzyme] = pieces[2]
             recognition_seq[enzyme] = pieces[3]
-            if enzymetype.lower() == 'all' or enzymetype == '' or 'enzymes' in enzymetype.lower():
+            if enzymetype.lower() == 'all' or enzymetype == '' or enzymetype.lower().startswith('enzymes that do not'):
                 if preLine.startswith('>>'):
                     pieces = preLine.replace('>>', '').replace(':', '').split(' ')
                     if pieces[0] not in notCutEnzyme:
@@ -174,7 +174,7 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
     
     f.close()
 
-    if enzymetype.lower() == 'all' or enzymetype == '' or 'enzymes' in enzymetype.lower():
+    if enzymetype.lower() == 'all' or enzymetype == '' or enzymetype.lower().startswith('enzymes that do not'):
         if preLine.startswith('>>'):
             pieces = preLine.replace('>>', '').replace(':', '').split(' ')
             if pieces[0] not in	notCutEnzyme:
@@ -186,7 +186,7 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
         fw.write(enzyme + "\n")
     fw.close()
 
-    if 'enzymes' in enzymetype.lower():
+    if enzymetype.startswith('enzymes that do not'):
          return ({}, notCutEnzyme)
 
     if "cut" in enzymetype:
@@ -307,6 +307,8 @@ def run_restriction_site_search(request, id):
     elif enzymetype.startswith('5'):
         enzymetype = "5' overhang"
 
+    return { "enzymetype": enzymetype }
+        
     defline = None
     if seq:
         defline = ">Unnamed sequence"
