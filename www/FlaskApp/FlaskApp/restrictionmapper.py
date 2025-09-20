@@ -139,6 +139,7 @@ def set_enzyme_types(enzymeHash, enzymeType):
         enzymeHash[pieces[0]] = enzymeType
     f.close()
 
+
 def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut):
 
     dataHash = {}
@@ -149,7 +150,6 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
     all_enzymes = []  # Track all enzymes we encounter
 
     f = open(outfile, encoding="utf-8")
-    preLine = ''
     enzyme = ''
 
     for line in f:
@@ -160,20 +160,15 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
             overhang[enzyme] = pieces[2]
             recognition_seq[enzyme] = pieces[3]
             all_enzymes.append(enzyme)  # Track this enzyme
-            # Initialize with empty cuts for this enzyme
+            # Initialize with empty list for this enzyme
             if enzyme not in dataHash:
-                dataHash[enzyme] = ''
+                dataHash[enzyme] = []
         elif line.startswith('>'):
-            # (/\>.+\[([0-9]+\,[0-9]+)\]$/) {
+            # Extract coordinates from lines like: >seq:123,456
             coords = line.strip().split(':')[1].replace('[', '').replace(']', '')
-            if dataHash[enzyme]:
-                dataHash[enzyme] = dataHash[enzyme] + ':' + coords
-            else:
-                dataHash[enzyme] = coords
-        preLine = line.strip()
+            dataHash[enzyme].append(coords)
 
     f.close()
-
     # Find enzymes that don't cut (no cut coordinates in dataHash)
     for enzyme in all_enzymes:
         if enzyme not in dataHash or not dataHash[enzyme]:
@@ -188,6 +183,14 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
 
     if enzymetype.lower().startswith('enzymes') and 'not' in enzymetype.lower():
         return ({}, notCutEnzyme)
+
+    # Convert list to colon-separated string for the rest of the processing
+    # (to maintain compatibility with the original code)
+    for enzyme in dataHash:
+        if dataHash[enzyme]:  # Only convert if there are cuts
+            dataHash[enzyme] = ':'.join(dataHash[enzyme])
+        else:
+            dataHash[enzyme] = ''  # Keep as empty string
 
     if "cut" in enzymetype:
         cutLimit = 1
@@ -233,7 +236,7 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
             
         if ("overhang" in enzymetype or "blunt" in enzymetype) and enzyme_type[enzyme] != enzymetype:
             continue
-            
+
         cutW = []
         cutC = []
         cutPositions = dataHash[enzyme].split(':')
@@ -256,6 +259,7 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
             if cutSite not in cutAll:
                 cutAll.append(cutSite)
         cutAll.append(seqLen)
+
         preCutSite = 0
         found = {}
         cutFragments = []
@@ -272,7 +276,9 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
         fragmentsReal = ", ".join([str(x) for x in cutFragments])
         fragments = ", ".join([str(x) for x in sorted(cutFragments, key=int, reverse=True)])
         cutNum = len(cutFragments) - 1
+
         fw.write(enzyme + "\t" + str(offset[enzyme]) + "\t" + str(overhang[enzyme]) + "\t" + recognition_seq[enzyme] + "\t" + enzyme_type[enzyme] + "\t" + str(cutNum) + "\t" + fragmentsReal + "\t" + fragments + "\t" + cutSiteW + "\t" + cutSiteC + "\n")
+
 
         data[enzyme] =  {  "cut_site_on_watson_strand": cutSiteW,
                            "cut_site_on_crick_strand": cutSiteC,
@@ -287,10 +293,10 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
 
     return (data, notCutEnzyme)
 
-        
+    
     
 def process_data_backup(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut):
-
+    # this version works for all types except 'enzymes that do not cut'
     dataHash = {}
     offset = {}
     overhang = {}
