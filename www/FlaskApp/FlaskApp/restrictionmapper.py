@@ -468,11 +468,11 @@ def run_restriction_site_search(request, id):
 
     if err == '':
         ## key is the enzyme
-        # (data, notCutEnzymeList) = process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut)
-        # (downloadUrl4cutSite, downloadUrl4notCut) = get_downloadURLs(cutSiteFile, notCutFile)
+        (data, notCutEnzymeList) = process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut)
+        (downloadUrl4cutSite, downloadUrl4notCut) = get_downloadURLs(cutSiteFile, notCutFile)
 
-        data = process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut)
-        return data
+        # data = process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut)
+        # return data
     
         return { "data": data,
                  "seqName": seqNm,
