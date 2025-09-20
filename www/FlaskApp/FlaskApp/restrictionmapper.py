@@ -471,8 +471,8 @@ def run_restriction_site_search(request, id):
         ## key is the enzyme
         (data, notCutEnzymeList) = process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut)
         # (downloadUrl4cutSite, downloadUrl4notCut) = get_downloadURLs(cutSiteFile, notCutFile)
-        downloadUrl4cutSite = ''
-        downloadUrl4notCut = ''
+        downloadUrl4cutSite = cutSiteFile
+        downloadUrl4notCut = notCutFile
 
         return { "data": data,
                  "seqName": seqNm,
