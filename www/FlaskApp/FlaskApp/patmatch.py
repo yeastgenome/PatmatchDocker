@@ -61,8 +61,34 @@ def upload_file_to_s3(file, filename):
     s3.upload_fileobj(file, S3_BUCKET, filename, ExtraArgs={'ACL': 'public-read'})
     clean_up_temp_files()
     return "https://" + S3_BUCKET + ".s3.amazonaws.com/" + filename
-              
+
+
 def get_downloadUrl(tmpFile):
+    downloadFile = tmpDir + tmpFile
+    thisFile = Path(str(downloadFile))
+
+    # If the file doesn't exist, return empty URL (or raise a controlled error)
+    if not thisFile.exists():
+        return ""
+
+    with thisFile.open(mode="rb") as fh:
+        md5sum = hashlib.md5(fh.read()).hexdigest()
+
+    newFileName = downloadFile
+    if md5sum:
+        tmpFile = md5sum + ".txt"
+        newFileName = tmpDir + tmpFile
+        os.rename(downloadFile, newFileName)
+
+    f = open(newFileName, "rb")
+    thread = threading.Thread(target=upload_file_to_s3_async, args=(f, tmpFile))
+    thread.start()
+
+    S3_BUCKET = os.environ['S3_BUCKET']
+    return f"https://{S3_BUCKET}.s3.amazonaws.com/patmatch/{tmpFile}"
+
+
+def get_downloadUrl_old(tmpFile):
 
     downloadFile = tmpDir + tmpFile
     thisFile = Path(str(downloadFile))
