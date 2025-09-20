@@ -11,11 +11,9 @@ scan4matches = binDir + "scan_for_matches"
 fastafile = dataDir + "orf_genomic.seq"
 
 def get_downloadURLs(cutSiteFile, notCutFile):
-
     return (get_downloadUrl(cutSiteFile), get_downloadUrl(notCutFile))
     
 def get_sequence(name):
-
     name = name.replace('SGD:', '')
 
     f = open(fastafile, encoding="utf-8")
@@ -41,7 +39,6 @@ def get_sequence(name):
     return (defline, seq)
 
 def write_seqfile(defline, seq, seqfile):
-    
     fw = open(seqfile, "w")
 
     ## remove all non-alphabet chars from seq string
@@ -67,26 +64,19 @@ def write_seqfile(defline, seq, seqfile):
     return (seqNm, chrCoords, len(seq))
 
 def set_enzyme_file(enzymetype):
-
     if enzymetype is None:
         return dataDir + 'rest_enzymes'
-
     if "Six-base" in enzymetype:
         return dataDir + 'rest_enzymes.6base'
-
     if "blunt" in enzymetype:
         return dataDir + 'rest_enzymes.blunt'
-    
     if "3" in enzymetype:
         return dataDir + 'rest_enzymes.3'
-
     if "5" in enzymetype:
         return dataDir + 'rest_enzymes.5'
-    
     return dataDir + 'rest_enzymes'
 
 def do_search(enzymefile, patfile, outfile, seqfile):
-
     f = open(enzymefile, encoding="utf-8")
 
     ## reset file
@@ -95,7 +85,6 @@ def do_search(enzymefile, patfile, outfile, seqfile):
     
     error_msg = ""
     for line in f:
-
         pieces = line.strip().split(' ')
         enzyme = pieces[0]
         offset = pieces[1]
@@ -126,7 +115,6 @@ def do_search(enzymefile, patfile, outfile, seqfile):
         return "No " + outfile + " generated in do_search!"
 
 def set_enzyme_types(enzymeHash, enzymeType):
-
     enzymeFile = "rest_enzymes.blunt"
     if '3' in enzymeType:
         enzymeFile = "rest_enzymes.3"
@@ -140,7 +128,6 @@ def set_enzyme_types(enzymeHash, enzymeType):
     f.close()
     
 def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile4notCut):
-
     dataHash = {}
     offset = {}
     overhang = {}
@@ -149,9 +136,9 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
     all_enzymes = []  # track every enzyme header we saw
 
     f = open(outfile, encoding="utf-8") 
-    # preLine = ''
     enzyme = ''
-    
+
+    # First pass: collect all enzymes and their cut positions
     for line in f:
         if line.startswith('>>'):
             pieces = line.strip().split(' ')
@@ -159,42 +146,35 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
             offset[enzyme] = pieces[1]
             overhang[enzyme] = pieces[2]
             recognition_seq[enzyme] = pieces[3]
-            # if enzymetype.lower() == 'all' or enzymetype == '' or (
-            #        enzymetype.lower().startswith('enzymes') and 'not' in enzymetype.lower()):
-            #    if preLine.startswith('>>'):
-            #        pieces = preLine.replace('>>', '').replace(':', '').split(' ')
-            #        if pieces[0] not in notCutEnzyme:
-            #            notCutEnzyme.append(pieces[0])
             all_enzymes.append(enzyme)
+            # Initialize this enzyme with no cuts
+            if enzyme not in dataHash:
+                dataHash[enzyme] = []
         elif line.startswith('>'):
-            # (/\>.+\[([0-9]+\,[0-9]+)\]$/) {
+            # Extract coordinates from lines like: >seq:123,456
             coords = line.strip().split(':')[1].replace('[', '').replace(']', '')
-            if enzyme in dataHash:
-                dataHash[enzyme] = dataHash[enzyme] + ':' + coords
-            else:
-                dataHash[enzyme] = coords 
-        # preLine = line.strip()
+            dataHash[enzyme].append(coords)
     
     f.close()
 
-    # if enzymetype.lower() == 'all' or enzymetype == '' or (
-    #        enzymetype.lower().startswith('enzymes') and 'not' in enzymetype.lower()):
-    #    if preLine.startswith('>>'):
-    #        pieces = preLine.replace('>>', '').replace(':', '').split(' ')
-    #        if pieces[0] not in	notCutEnzyme:
-    #            notCutEnzyme.append(pieces[0])
-                
-    fw = open(downloadfile4notCut, 'w')
-    notCutEnzyme.sort()
-    for enzyme in notCutEnzyme:
-        fw.write(enzyme + "\n")
-    fw.close()
-
     if enzymetype.lower().startswith('enzymes') and 'not' in enzymetype.lower():
+        for enzyme in all_enzymes:
+            if enzyme not in dataHash or not dataHash[enzyme]:
+                notCutEnzyme.append(enzyme)
+        fw = open(downloadfile4notCut, 'w')
+        notCutEnzyme.sort()
+        for enzyme in notCutEnzyme:
+            fw.write(enzyme + "\n")
+        fw.close()
         return ({}, notCutEnzyme)
 
+    # The following code is for enzymes that do cut...
+    
+    # Convert dataHash from list to colon-separated string for backward compatibility
+    for enzyme in dataHash:
+        dataHash[enzyme] = ':'.join(dataHash[enzyme])
+        
     if "cut" in enzymetype:
-         
         cutLimit = 1
         if 'twice' in enzymetype:
             cutLimit = 2
@@ -227,7 +207,7 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
     fw = open(downloadfile4cutSite, 'w')
     fw.write("Enzyme\toffset (bp)\toverhang (bp)\trecognition sequence\tenzyme type\tnumber of cuts\tordered fragment size\tsorted fragment size\tcut site on watson strand\tcut site on crick strand\n")
 
-    for enzyme in sorted (dataHash):
+    for enzyme in sorted(dataHash):
         if ("overhang" in enzymetype or "blunt" in enzymetype) and enzyme_type[enzyme] != enzymetype:
             continue
         cutW = []
@@ -285,9 +265,7 @@ def process_data(seqLen, enzymetype, outfile, downloadfile4cutSite, downloadfile
     
     return (data, notCutEnzyme)
 
-
 def run_restriction_site_search(request, id):
-
     patfile = tmpDir + "patfile." + id + ".txt"
     outfile = tmpDir + "outfile." + id + ".txt"
     seqfile = tmpDir + "seqfile." + id + ".txt"
@@ -343,4 +321,3 @@ def run_restriction_site_search(request, id):
                  "notCutEnzyme": [],
                  "downloadUrl": '',
                  "downloadUrl4notCutEnzyme": '' }
-    
