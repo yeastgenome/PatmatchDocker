@@ -319,19 +319,28 @@ def cleanup_pattern(pattern):
 
 
 def set_seq_length(seqNm2length, datafile):
+    seqHasStop = {}
     with open(datafile, encoding="utf-8") as f:
         seq = ''
         preSeqNm = ''
         for line in f:
             if line.startswith('>'):
                 if preSeqNm != '':
-                    seqNm2length[preSeqNm] = len(seq)  # keep '*' if present
+                    seqHasStop[preSeqNm] = seq.endswith('*')
+                    # keep your original behavior: biological length (strip '*')
+                    if seqHasStop[preSeqNm]:
+                        seq = seq[:-1]
+                    seqNm2length[preSeqNm] = len(seq)
                 preSeqNm = line.replace('>', '').split(' ')[0]
                 seq = ''
             else:
                 seq += line.strip()
         if preSeqNm and seq:
+            seqHasStop[preSeqNm] = seq.endswith('*')
+            if seqHasStop[preSeqNm]:
+                seq = seq[:-1]
             seqNm2length[preSeqNm] = len(seq)
+    return seqHasStop
 
 
 def find_exclusion_offset(pattern):
