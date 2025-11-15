@@ -1,13 +1,15 @@
-#!/var/www/FlaskApp/FlaskApp/venv/bin/python3
 import sys
+import os
 import logging
-logging.basicConfig(stream=sys.stderr)
-sys.path.insert(0,"/var/www/FlaskApp/")
-sys.path.append('/var/www/FlaskApp/FlaskApp/venv/lib/python3.8/site-packages')
 
-activate_this = '/var/www/FlaskApp/FlaskApp/venv/bin/activate_this.py'
-with open(activate_this) as file_:
-    exec(file_.read(), dict(__file__=activate_this))
-    
+logging.basicConfig(stream=sys.stderr)
+
+# Make sure the app package is on the path
+sys.path.insert(0, "/var/www/FlaskApp")
+sys.path.insert(0, "/var/www/FlaskApp/FlaskApp")
+
+# Import the Flask app object
 from FlaskApp import app as application
-application.secret_key = 'Add your secret key'
+
+# Optional: set secret key (better to use env var in real deployments)
+application.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-me")
