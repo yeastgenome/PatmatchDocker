@@ -4,35 +4,12 @@ import json
 import os
 import hashlib
 from pathlib import Path
+import boto3
 import time
 import threading
 import re
 
-# from flask import send_from_directory, Response
-
-try:
-    from flask import send_from_directory, Response
-    HAS_FLASK = True
-except ImportError:
-    HAS_FLASK = False
-
-    # Minimal stubs so module import still works when Flask is missing.
-    def send_from_directory(*args, **kwargs):
-        raise RuntimeError(
-            "Flask is not installed; send_from_directory is unavailable in this environment."
-        )
-
-    class Response(object):
-        pass
-                                    
-
-# Optional boto3 import – safe on machines without boto3
-try:
-    import boto3
-    HAS_BOTO3 = True
-except ImportError:
-    boto3 = None
-    HAS_BOTO3 = False
+from flask import send_from_directory, Response
 
 MAX_BUFFER_SIZE = 1600000
 MIN_TOKEN = 3
@@ -40,50 +17,27 @@ MINHITS = 500
 MAXHITS = 100000
 DEFAULT_MAXHITS = 500
 
-dataDir = '/data/patmatch/'
 binDir = '/var/www/bin/'
+dataDir = '/data/patmatch/'
 tmpDir = '/var/www/tmp/'
 config_dir = '/var/www/conf/'
 seqIndexCreateScript = binDir + 'generate_sequence_index.pl'
 patternConvertScript = binDir + 'patmatch_to_nrgrep.pl'
 searchScript = binDir + 'nrgrep_coords'
-
-day = 1  # delete temp files that are one day old
-
-
-def _set_dirs_for_test(root_dir, root_data_dir):
-    global binDir, tmpDir, config_dir, dataDir
-    global seqIndexCreateScript, patternConvertScript, searchScript
-
-    root_dir = root_dir.rstrip("/")  # safety
-
-    binDir = root_dir + "/www/bin/"
-    tmpDir = "./"
-    config_dir = root_dir + "/www/conf/"
-    dataDir = root_data_dir
-    seqIndexCreateScript = binDir + 'generate_sequence_index.pl'
-    patternConvertScript = binDir + 'patmatch_to_nrgrep.pl'
-    searchScript         = binDir + 'nrgrep_coords'
-
+day = 1  ## delete temp files that are one day old
 
 def set_download_file(filename):
-    if not HAS_FLASK:
-        raise RuntimeError("set_download_file requires Flask, which is not installed.")
-    return send_from_directory(
-        tmpDir,
-        filename,
-        as_attachment=True,
-        mimetype='application/text',
-        attachment_filename=str(filename),
-    )
 
+    return send_from_directory(tmpDir, filename, as_attachment=True, mimetype='application/text', attachment_filename=(str(filename)))
 
 def clean_up_temp_files():
+    
     now = time.time()
     for f in os.listdir(tmpDir):
         file = os.path.join(tmpDir, f)
-        if os.path.isfile(file) and os.stat(file).st_mtime < now - day * 86400:
-            os.remove(file)
+        if os.stat(file).st_mtime < now - day * 86400:
+            if os.path.isfile(file):
+                os.remove(file)
 
 
 def upload_file_to_s3_async(file, filename):
@@ -95,26 +49,13 @@ def upload_file_to_s3_async(file, filename):
     except Exception as e:
         print("Error uploading file:", e)
     finally:
-        try:
-            file.close()
-        except Exception:
-            pass
-
+        file.close()
 
 def upload_file_to_s3(file, filename):
-    """
-    Upload file to S3 if boto3 and S3_BUCKET are available.
-    Otherwise, act as a no-op (useful for local/dev/test without boto3).
-    """
-    S3_BUCKET = os.environ.get('S3_BUCKET')
-
-    # If we don't have boto3 or bucket info, skip upload entirely.
-    if not HAS_BOTO3 or not S3_BUCKET:
-        clean_up_temp_files()
-        return ""
 
     filename = 'patmatch/' + filename
-
+    
+    S3_BUCKET = os.environ['S3_BUCKET']
     s3 = boto3.client('s3')
     file.seek(0)
     s3.upload_fileobj(file, S3_BUCKET, filename, ExtraArgs={'ACL': 'public-read'})
@@ -140,18 +81,11 @@ def get_downloadUrl(tmpFile):
         os.rename(downloadFile, newFileName)
 
     f = open(newFileName, "rb")
+    thread = threading.Thread(target=upload_file_to_s3_async, args=(f, tmpFile))
+    thread.start()
 
-    # Only start the upload thread if S3 is configured and boto3 is available
-    if HAS_BOTO3 and os.environ.get('S3_BUCKET'):
-        thread = threading.Thread(target=upload_file_to_s3_async, args=(f, tmpFile))
-        thread.start()
-        S3_BUCKET = os.environ['S3_BUCKET']
-        # return f"https://{S3_BUCKET}.s3.amazonaws.com/patmatch/{tmpFile}"
-        return "https://" + S3_BUCKET + ".s3.amazonaws.com/patmatch/" + tmpFile
-    else:
-        # No S3 available – just close the file and return empty URL
-        f.close()
-        return ""
+    S3_BUCKET = os.environ['S3_BUCKET']
+    return f"https://{S3_BUCKET}.s3.amazonaws.com/patmatch/{tmpFile}"
 
 
 def get_downloadUrl_old(tmpFile):
@@ -168,16 +102,16 @@ def get_downloadUrl_old(tmpFile):
         os.rename(downloadFile, newFileName)
 
     file = open(newFileName, "rb")
+       
+    # s3_url = upload_file_to_s3(file, tmpFile)
 
-    # Start a new thread for file upload only if S3 is usable
-    if HAS_BOTO3 and os.environ.get('S3_BUCKET'):
-        thread = threading.Thread(target=upload_file_to_s3_async, args=(file, tmpFile))
-        thread.start()
-        S3_BUCKET = os.environ['S3_BUCKET']
-        return "https://" + S3_BUCKET + ".s3.amazonaws.com/" + 'patmatch/' + tmpFile
-    else:
-        file.close()
-        return ""
+    # Start a new thread for file upload
+    thread = threading.Thread(target=upload_file_to_s3_async, args=(file, tmpFile))
+    thread.start()
+
+    # Return the expected S3 URL immediately
+    S3_BUCKET = os.environ['S3_BUCKET']
+    return "https://" + S3_BUCKET + ".s3.amazonaws.com/" + 'patmatch/' + tmpFile
 
 
 def get_config(conf):
@@ -198,11 +132,11 @@ def get_record_offset(datafile):
 
     recordOffSetList = []
     seqNm4offSet = {}
-
-    cmd = seqIndexCreateScript + " < " + datafile
+    
+    cmd = seqIndexCreateScript + " < " + datafile 
 
     out = os.popen(cmd).read()
-
+    
     for line in out.split('\n'):
         pieces = line.strip().split('\t')
         if len(pieces) < 2:
@@ -211,18 +145,18 @@ def get_record_offset(datafile):
         seqNm = pieces[1]
         recordOffSetList.append(offSet)
         seqNm4offSet[offSet] = seqNm
-
+        
     return (recordOffSetList, seqNm4offSet)
 
 
 def get_name_offset(offSet, recordOffSetList):
 
-    # perform binary search
+    ### perform binary search                                                                          
     low = 0
     high = len(recordOffSetList) - 1
     while high > low:
-        # pre-condition: offSet is in recordOffSetList[low .. high]
-        middle = int((low + high) / 2)
+        ### pre-condition: offSet is in recordOffSetList[$low .. $high]
+        middle = int((low+high)/2)
         if recordOffSetList[middle] == offSet:
             return offSet
         elif high - low == 1:
@@ -236,8 +170,8 @@ def get_name_offset(offSet, recordOffSetList):
             high = middle - 1
 
     return recordOffSetList[low]
-
-
+                     
+            
 def check_pattern(pattern, seqtype):
 
     if seqtype in ['pep', 'protein']:
@@ -265,8 +199,7 @@ def check_pattern(pattern, seqtype):
     if tokens < MIN_TOKEN:
         return "Your pattern is shorter than the minimum number of " + str(MIN_TOKEN) + " residues."
     return ''
-
-
+    
 def process_pattern(pattern, seqtype, strand, insertion, deletion, substitution, mismatch):
 
     mismatch_option = ""
@@ -276,7 +209,7 @@ def process_pattern(pattern, seqtype, strand, insertion, deletion, substitution,
         if x in pattern:
             check_pattern(pattern, seqtype)
             break
-
+    
     option = ''
 
     if seqtype is None:
@@ -287,16 +220,16 @@ def process_pattern(pattern, seqtype, strand, insertion, deletion, substitution,
         option = '-c'
     else:
         option = '-n'
-
+        
     cmd = patternConvertScript + " " + option + " '" + pattern + "'"
     pattern = os.popen(cmd).read()
-
-    comp_pattern = ""
+    
+    comp_pattern = ""    
     if seqtype.lower() in ['dna', 'nuc'] and (strand is None or strand.startswith('Both')):
         cmd2 = patternConvertScript + " -c " + "'" + pattern + "'"
         comp_pattern = os.popen(cmd2).read()
-
-    if insertion and insertion.startswith('insertion'):
+    
+    if insertion and insertion.startswith('insertion'): 
         mismatch_option = mismatch_option + 'i'
 
     if deletion and deletion.startswith('deletion'):
@@ -310,7 +243,7 @@ def process_pattern(pattern, seqtype, strand, insertion, deletion, substitution,
 
     if mismatch is None:
         mismatch = 0
-
+    
     mismatch_option = str(mismatch) + mismatch_option
 
     return (pattern, comp_pattern, mismatch_option)
@@ -323,14 +256,14 @@ def get_sequence(dataset, seqname):
     if 'patmatch' not in dataset:
         dataset = dataDir + dataset
     f = open(dataset, encoding="utf-8")
-
+    
     found = 0
     seq = ""
     defline = ""
 
     for line in f:
         line = line.strip()
-        if line.lower().startswith('>' + seqname.lower()):
+        if line.lower().startswith('>'+seqname.lower()):
             found = 1
             defline = line
             continue
@@ -339,19 +272,27 @@ def get_sequence(dataset, seqname):
         if found == 1 and line.startswith('>'):
             break
         seq = seq + line
-
+    
     f.close()
 
     defline = defline.replace('"', "'")
 
-    return {'defline': defline,
-            'seq': seq}
+    return { 'defline': defline,
+             'seq': seq }
 
 
 def get_param(request, name, default=None):
+
+    """
+    p = request.args
+    f = request.form
+
+    return f.get(name) if f.get(name) else p.get(name)
+    """
+
     # Check if the parameter is in the query string
     value = request.args.get(name)
-
+    
     # If not in the query string, check the form data
     if value is None:
         value = request.form.get(name)
@@ -359,9 +300,15 @@ def get_param(request, name, default=None):
     # Return the value if found, otherwise return the default value
     return value if value is not None else default
 
-
+    
 def cleanup_pattern(pattern):
-    # decode common URL-escapes
+    """
+    pattern = pattern.replace('%28', '(').replace('%29', ')')
+    pattern = pattern.replace('%7B', '{').replace('%7D', '}')
+    pattern = pattern.replace('%5B', '[').replace('%5D', ']')
+    patteern = pattern.replace('%2C', ',')
+    """
+    # decode common URL‐escapes
     pattern = (pattern
                .replace('%28', '(').replace('%29', ')')
                .replace('%7B', '{').replace('%7D', '}')
@@ -372,44 +319,39 @@ def cleanup_pattern(pattern):
 
 
 def set_seq_length(seqNm2length, datafile):
-    seqHasStop = {}
-    with open(datafile, encoding="utf-8") as f:
-        seq = ''
-        preSeqNm = ''
-        for line in f:
-            if line.startswith('>'):
-                if preSeqNm != '':
-                    # Canonicalize name (strip trailing comma if present, etc.)
-                    canon_name = preSeqNm.rstrip(',')
-                    seqHasStop[canon_name] = seq.endswith('*')
-                    # biological length (strip trailing '*')
-                    if seqHasStop[canon_name]:
-                        seq = seq[:-1]
-                    seqNm2length[canon_name] = len(seq)
-                preSeqNm = line.replace('>', '').split(' ')[0]
-                preSeqNm = preSeqNm.rstrip(',')
-                seq = ''
-            else:
-                seq += line.strip()
-        if preSeqNm and seq:
-            canon_name = preSeqNm.rstrip(',')
-            seqHasStop[canon_name] = seq.endswith('*')
-            if seqHasStop[canon_name]:
-                seq = seq[:-1]
-            seqNm2length[canon_name] = len(seq)
-    return seqHasStop
 
-                    
+    f = open(datafile, encoding="utf-8")
+    seq = ''
+    preSeqNm = ''
+    for line in f:
+        if line.startswith('>'):
+            seqNm = line.replace('>', '').split(' ')[0]
+            if preSeqNm != '':
+                if seq.endswith('*'):
+                    seq = seq.rstrip(seq[-1])
+                seqNm2length[preSeqNm] = len(seq)
+            preSeqNm = seqNm
+            seq = ''
+        else:
+            seq = seq + line.strip()
+            
+    if preSeqNm != '' and seq != '':
+        if seq.endswith('*'):
+            seq = seq.rstrip(seq[-1])
+        seqNm2length[preSeqNm] = len(seq)
+    f.close()
+
+
 def find_exclusion_offset(pattern):
     # Improved regex to tokenize character classes, quantified atoms, and literals
     token_re = r'\[[^\]]+\]|.(?:[*+?]|\{\d*(?:,\d*)?\})?'
     tokens = re.findall(token_re, pattern)
-
+    
     # Find the first negated character class [^...]
     excl_idx = next((i for i, t in enumerate(tokens) if t.startswith('[^')), None)
     if excl_idx is None:
         return None
-
+    
     offset = 0
     for tok in tokens[:excl_idx]:
         if tok.startswith('['):
@@ -419,7 +361,7 @@ def find_exclusion_offset(pattern):
             # Handle quantified atoms and literals
             if len(tok) == 1:
                 # Single character with no quantifier
-                min_repeats = 1
+                offset += 1
             else:
                 # Extract quantifier and determine minimal repeats
                 quant = tok[1:]
@@ -442,21 +384,26 @@ def find_exclusion_offset(pattern):
                     # Non-quantifier suffix (shouldn't occur with proper tokenization)
                     min_repeats = 1
                 offset += min_repeats
-
+                
     return offset
 
-
+    
 def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, begMatch, endMatch, downloadFile, original_pattern):
 
     seqNm2length = {}
     if endMatch == 1:
         set_seq_length(seqNm2length, datafile)
 
+    # excluded_offset = find_exclusion_offset(pattern)
+
     # Track exclusion positions and their characters
     exclusion_positions = []
     for m in re.finditer(r'\[\^([^\]]+)\]', original_pattern):
         exclusion_pos_pos = find_exclusion_offset(m.string[:m.start()])  # Position of this [^...]
-        exclusion_positions.append((exclusion_pos_pos, set(m.group(1))))
+        exclusion_positions.append( (exclusion_pos_pos, set(m.group(1))) )
+
+    # for m in re.finditer(r'\[\^([^\]]+)\]', original_pattern):
+    #    excluded_chars.update(m.group(1))
 
     name2data = {}
     if 'orf_' in datafile:
@@ -478,14 +425,15 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
             for line in f:
                 if line.startswith('>'):
                     # >A:2170-2479, Chr I from 2170-2479, Genome Release 64-3-1, between YAL068C and YAL067W-A
+                    # /^>([^ ]+)\, Chr ([^ ]+) from .+ between ([^ ]+ and [^ ]+)/)
                     pieces = line.strip().replace('>', '').split(' ')
                     seqName = pieces[0].replace(',', '')
                     chr = pieces[2]
                     orfs = line.strip().split('between ')[1]
                     seqNm2chr[seqName] = chr
                     orfs = orfs.replace('and', '-')
-                    seqNm2orfs[seqName] = orfs
-
+                    seqNm2orfs[seqName] = orfs;
+        
     data = []
 
     totalHits = 0
@@ -501,9 +449,9 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
     else:
         # Log unexpected value of maxhits, if needed
         maxhits = DEFAULT_MAXHITS
-
+    
     for line in output.split('\n'):
-
+        
         if line.startswith('['):
 
             line = line.replace('[', '').replace(']', '')
@@ -524,8 +472,8 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
                         break
             if exclude_match:
                 continue
-
-            offSet = get_name_offset(beg, recordOffSetList)
+                        
+            offSet = get_name_offset(beg, recordOffSetList);
             if not str(offSet).isdigit():
                 continue
             seqBeg = beg - offSet + 1
@@ -535,40 +483,31 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
                 continue
             if begMatch == 1 and seqBeg != 1:
                 continue
-            # if endMatch == 1 and seqEnd != seqNm2length.get(seqNm, seqEnd):
-            #    continue
-            if endMatch == 1:
-                length = seqNm2length.get(seqNm)
-                if length is None:
-                    # If we somehow don't know the length for this sequence,
-                    # skip the hit instead of crashing the whole endpoint.
-                    continue
-                if seqEnd != length:
-                    continue
+            if endMatch == 1 and seqEnd != seqNm2length[seqNm]:
+                continue
             if seqNm.startswith('>'):
-                # match to the fasta header line
+                ## match to the fasta header line 
                 continue
 
             if seqNm.endswith(','):
                 seqNm = seqNm.rstrip(seqNm[-1])
-
+                
             if 'Not' in datafile:
+                # num = int(seqNm.split(':')[1].split('-')[0])
                 pieces = seqNm.split(':')
                 if len(pieces) < 2:
                     continue
                 num = int(pieces[1].split('-')[0])
-                seqBeg = seqBeg + num - 1
-                seqEnd = seqEnd + num - 1
+                seqBeg = seqBeg + num -1
+                seqEnd = seqEnd + num -1
                 if seqNm not in seqNm2chr or seqNm not in seqNm2orfs:
                     continue
 
-                row = (str(seqNm2orfs.get(seqNm)) + "\t" + str(seqBeg) + "\t" + str(seqEnd) +
-                       "\t" + matchingPattern + "\t" + str(seqNm2chr.get(seqNm)) + "\t" + seqNm)
-
+                row = str(seqNm2orfs.get(seqNm)) + "\t" + str(seqBeg) +  "\t" + str(seqEnd) + "\t" + matchingPattern + "\t" + str(seqNm2chr.get(seqNm)) + "\t" + seqNm
+                
             else:
                 (gene, sgdid, desc) = name2data.get(seqNm, ('', '', ''))
-                row = (seqNm + "\t" + str(seqBeg) + "\t" + str(seqEnd) + "\t" + matchingPattern +
-                       "\t" + gene + "\t" + sgdid + "\t" + desc)
+                row = seqNm + "\t" + str(seqBeg) + "\t" + str(seqEnd) + "\t" + matchingPattern + "\t" + gene + "\t" + sgdid + "\t" + desc
 
             if seqNm not in hitCount4seqNm:
                 uniqueHits = uniqueHits + 1
@@ -587,7 +526,7 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
     header_line = ""
 
     if 'Not' in datafile:
-        header_line = "Chromosome\tBetweenORFtoORF\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n"
+        header_line = "Chromosome\tBetweenORFtoORF\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\n"    
     elif 'orf_' in datafile:
         header_line = "Feature Name\tGene Name\tHitNumber\tMatchPattern\tMatchStartCoord\tMatchStopCoord\tLocusInfo\n"
     else:
@@ -600,49 +539,48 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
     data.sort()
 
     error_message = ''
-
+    
     for row in data:
         try:
             if 'Not' in datafile:
                 [orfs, beg, end, matchPattern, chr, seqNm] = row.split('\t')
                 count = hitCount4seqNm[seqNm]
                 orfs = orfs.strip()
-                newData.append({'orfs': orfs,
-                                'chr': chr,
-                                'beg': beg,
-                                'end': end,
-                                'count': count,
-                                'seqname': seqNm,
-                                'matchingPattern': matchPattern})
+                newData.append({ 'orfs': orfs,
+                             'chr': chr,
+                             'beg': beg,
+                             'end': end,
+                             'count': count,
+                             'seqname': seqNm,
+                             'matchingPattern': matchPattern })
                 line = chr + "\t" + orfs + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n"
             else:
 
                 [seqNm, beg, end, matchPattern, gene, sgdid, desc] = row.split('\t')
-
+        
                 count = hitCount4seqNm.get(seqNm, 0)
-
+        
                 if sgdid != "":
                     if gene == seqNm:
                         gene = ""
-                    newData.append({'seqname': seqNm,
-                                    'beg': beg,
-                                    'end': end,
-                                    'count': count,
-                                    'matchingPattern': matchPattern,
-                                    'gene_name': gene,
-                                    'sgdid': sgdid,
-                                    'desc': desc})
-                    line = (seqNm + "\t" + gene + "\t" + str(count) + "\t" + matchPattern +
-                            "\t" + beg + "\t" + end + "\t" + desc + "\n")
+                    newData.append({ 'seqname': seqNm,
+                                 'beg': beg,
+                                 'end': end,
+                                 'count': count,
+                                 'matchingPattern': matchPattern,
+                                 'gene_name': gene,
+                                 'sgdid': sgdid,
+                                 'desc': desc })
+                    line = seqNm + "\t" + gene + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\t" + desc + "\n"
                 else:
-                    newData.append({'seqname': seqNm,
-                                    'gene_name': gene,
-                                    'sgdid': sgdid,
-                                    'beg': beg,
-                                    'end': end,
-                                    'count': count,
-                                    'matchingPattern': matchPattern,
-                                    'desc': desc})
+                    newData.append({ 'seqname': seqNm,
+                                 'gene_name': gene,
+                                 'sgdid': sgdid,
+                                 'beg': beg,
+                                 'end': end,
+                                 'count': count,
+                                 'matchingPattern': matchPattern,
+                                 'desc': desc })
                     line = seqNm + "\t" + str(count) + "\t" + matchPattern + "\t" + beg + "\t" + end + "\n"
                 file_content.append(line)
         except MemoryError as e:
@@ -652,9 +590,11 @@ def process_output(recordOffSetList, seqNm4offSet, output, datafile, maxhits, be
             error_message += "OS Error: " + str(e) + "\n"
             continue
         except (IndexError, ValueError) as e:
+            # Handle specific errors like IndexError or ValueError
             error_message += "Error processing row: " + str(row) + "error: " + str(e) + "\n"
             continue
         except Exception as e:
+            # Catch any other unforeseen errors
             error_message += "Unexpected error for row: " + str(row) + "error: " + str(e) + "\n"
             error_message += "Traceback: " + str(traceback.format_exc()) + "\n"
             continue
@@ -681,14 +621,14 @@ def run_patmatch(request, id):
 
     p = request.args
     f = request.form
-
+    
     dataset = get_param(request, 'dataset')
     seqtype = get_param(request, 'seqtype')
     seqname = get_param(request, 'seqname')
 
     if seqtype is None:
         seqtype = 'pep'
-
+    
     if dataset:
         dataset = dataset + ".seq"
     else:
@@ -696,7 +636,7 @@ def run_patmatch(request, id):
             dataset = "orf_dna.seq"
         else:
             dataset = "orf_pep.seq"
-
+	
     datafile = dataDir + dataset
 
     if seqname:
@@ -713,122 +653,71 @@ def run_patmatch(request, id):
     elif pattern.endswith('>'):
         endMatch = 1
         pattern = pattern.replace('>', '')
-
+    
     error = check_pattern(pattern, seqtype)
     if error:
-        return {"error": error}
-
-    (pattern, comp_pattern, option) = process_pattern(
-        pattern,
-        get_param(request, 'seqtype'),
-        get_param(request, 'strand'),
-        get_param(request, 'insertion'),
-        get_param(request, 'deletion'),
-        get_param(request, 'substitution'),
-        get_param(request, 'mismatch')
-    )
+        return { "error": error }
+    
+    (pattern, comp_pattern, option) = process_pattern(pattern,
+                                                      get_param(request, 'seqtype'),
+                                                      get_param(request, 'strand'),
+                                                      get_param(request, 'insertion'),
+                                                      get_param(request, 'deletion'),
+                                                      get_param(request, 'substitution'),
+                                                      get_param(request, 'mismatch'))
 
     maxBufferSize = MAX_BUFFER_SIZE
-
-    nrgrep = (searchScript + " -i -b " + str(maxBufferSize) +
-              " -k " + option + " '" + pattern + "' '" + datafile + "'")
+    
+    nrgrep = searchScript + " -i -b " + str(maxBufferSize) + " -k " + option + " '" + pattern + "' '" + datafile + "'"
     output = os.popen(nrgrep).read()
 
     nrgrep2 = ''
     output2 = ''
     if comp_pattern:
-        nrgrep2 = (searchScript + " -i -b " + str(maxBufferSize) +
-                   " -k " + option + " '" + comp_pattern + "' '" + datafile + "'")
+        nrgrep2 = searchScript + " -i -b " +str( maxBufferSize) + " -k " + option + " '" + comp_pattern +"' '" + datafile + "'"
         output2 = os.popen(nrgrep2).read()
         output = output + "\n" + output2
 
+    # return { "nrgrep": nrgrep,
+    #         "nrgrep2": nrgrep2,
+    #         "output": output }
+        
     (recordOffSetList, seqNm4offSet) = get_record_offset(datafile)
 
-    (data, uniqueHits, totalHits, error_message) = process_output(
-        recordOffSetList, seqNm4offSet, output,
-        datafile, get_param(request, 'max_hits'),
-        begMatch, endMatch, downloadFile, pattern
-    )
+    # return { "nrgrep": nrgrep,
+    #         "nrgrep2": nrgrep2,
+    #         "recordOffSetlist": recordOffSetList,
+    #         "seqNm4offSet": seqNm4offSet }
+    
+    (data, uniqueHits, totalHits, error_message) = process_output(recordOffSetList, seqNm4offSet, output,
+                                                                  datafile, get_param(request, 'max_hits'),
+                                                                  begMatch, endMatch, downloadFile, pattern)
 
     downloadUrl = ''
     if uniqueHits > 0:
         downloadUrl = get_downloadUrl(tmpFile)
+        
+    return { "hits": data,
+             "uniqueHits": uniqueHits,
+             "totalHits": totalHits,
+             "downloadUrl": downloadUrl,
+             "error_message": error_message }
+    
+    
 
-    return {"hits": data,
-            "uniqueHits": uniqueHits,
-            "totalHits": totalHits,
-            "downloadUrl": downloadUrl,
-            "error_message": error_message}
 
 
-def run_test(pattern,
-             seqtype='pep',
-             strand=None,
-             insertion=None,
-             deletion=None,
-             substitution=None,
-             mismatch=None,
-             max_hits=100,
-             root_dir=None,
-             root_data_dir=None):
-    """
-    Run patmatch locally (no Flask request, no S3) for quick testing.
-    Returns (data, uniqueHits, totalHits, error_message).
-    """
 
-    if root_dir:
-        _set_dirs_for_test(root_dir, root_data_dir)
 
-    tmpFile = "patmatch.6688"
-    downloadFile = tmpDir + tmpFile
 
-    # pick dataset based on seqtype
-    if seqtype == 'pep' or seqtype == 'protein':
-        dataset = "orf_pep.seq"
-    else:
-        dataset = "orf_dna.seq"
 
-    datafile = dataDir + dataset
 
-    pattern = cleanup_pattern(pattern)
 
-    begMatch = 0
-    endMatch = 0
-    if pattern.startswith('<'):
-        begMatch = 1
-        pattern = pattern.replace('<', '')
-    elif pattern.endswith('>'):
-        endMatch = 1
-        pattern = pattern.replace('>', '')
 
-    error = check_pattern(pattern, seqtype)
-    if error:
-        return [], 0, 0, error
 
-    (pattern_conv, comp_pattern, option) = process_pattern(
-        pattern, seqtype, strand, insertion, deletion, substitution, mismatch
-    )
 
-    maxBufferSize = MAX_BUFFER_SIZE
 
-    nrgrep = (searchScript + " -i -b " + str(maxBufferSize) +
-              " -k " + option + " '" + pattern_conv + "' '" + datafile + "'")
-    output = os.popen(nrgrep).read()
 
-    nrgrep2 = ''
-    output2 = ''
-    if comp_pattern:
-        nrgrep2 = (searchScript + " -i -b " + str(maxBufferSize) +
-                   " -k " + option + " '" + comp_pattern + "' '" + datafile + "'")
-        output2 = os.popen(nrgrep2).read()
-        output = output + "\n" + output2
 
-    (recordOffSetList, seqNm4offSet) = get_record_offset(datafile)
 
-    (data, uniqueHits, totalHits, error_message) = process_output(
-        recordOffSetList, seqNm4offSet, output, datafile,
-        max_hits, begMatch, endMatch, downloadFile, pattern_conv
-    )
 
-    # Note: no S3 logic here on purpose.
-    return (data, uniqueHits, totalHits, error_message)
