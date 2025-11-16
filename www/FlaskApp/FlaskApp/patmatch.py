@@ -752,7 +752,11 @@ def run_patmatch(request, id):
 
     downloadUrl = ''
     if uniqueHits > 0:
-        downloadUrl = get_downloadUrl(tmpFile)
+        try:
+            downloadUrl = get_downloadUrl(tmpFile)
+        except Exception as e:
+            # Don't let download URL failures kill the whole request
+            error_message = (error_message or '') + f" Error generating download URL: {e}"
 
     return {"hits": data,
             "uniqueHits": uniqueHits,
