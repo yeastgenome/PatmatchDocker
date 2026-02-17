@@ -1,35 +1,39 @@
-FROM ubuntu:24.04
-ENV DEBIAN_FRONTEND=noninteractive \
-    TZ=Etc/UTC \
-    LANG=C.UTF-8 \
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      apache2 \
-      libapache2-mod-wsgi-py3 \
-      python3 \
-      python3-venv \
-      ca-certificates \
-      net-tools \
- && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Use local repo instead of git clone
-COPY ./www /var/www
-COPY ./FlaskApp.conf /etc/apache2/sites-available/FlaskApp.conf
+# Create necessary directories
+RUN install -d -m 755 /var/www/app && \
+    install -d -m 1777 /var/www/tmp && \
+    install -d -m 755 /var/www/conf
 
-RUN mkdir -p /var/www/tmp \
- && chmod 1777 /var/www/tmp \
- && python3 -m venv /var/www/FlaskApp/FlaskApp/venv \
- && /var/www/FlaskApp/FlaskApp/venv/bin/pip install --upgrade pip \
- && /var/www/FlaskApp/FlaskApp/venv/bin/pip install --no-cache-dir \
-      "flask>=2,<3" flask-cors boto3 requests
+WORKDIR /var/www/app
 
-RUN a2enmod wsgi \
- && a2ensite FlaskApp \
- && a2dissite 000-default || true
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-EXPOSE 80
-ENV SERVER_NAME=localhost
+# Copy application code
+COPY www/app/*.py ./
+COPY www/conf/*.json /var/www/conf/
 
-CMD ["apachectl", "-D", "FOREGROUND"]
+# Environment variables
+ENV DATA_DIR=/data/patmatch/ \
+    RESTRICTION_DATA_DIR=/data/restriction_mapper/ \
+    TMP_DIR=/var/www/tmp/ \
+    CONF_DIR=/var/www/conf/ \
+    S3_BUCKET=""
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --retries=5 \
+    CMD curl -fsS http://localhost:8000/ || exit 1
+
+EXPOSE 8000
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

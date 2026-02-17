@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  patmatch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount data directories
+      - ${DATA_DIR:-./data/patmatch}:/data/patmatch:ro
+      - ${RESTRICTION_DATA_DIR:-./data/restriction_mapper}:/data/restriction_mapper:ro
+      # Mount config for development
+      - ./www/conf:/var/www/conf:ro
+      # Mount app code for development (hot reload)
+      - ./www/app:/var/www/app:ro
+      # Temp directory for output files
+      - patmatch_tmp:/var/www/tmp
+    environment:
+      - DATA_DIR=/data/patmatch/
+      - RESTRICTION_DATA_DIR=/data/restriction_mapper/
+      - TMP_DIR=/var/www/tmp/
+      - CONF_DIR=/var/www/conf/
+      - S3_BUCKET=${S3_BUCKET:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    # For development with hot reload:
+    # command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  patmatch_tmp:
